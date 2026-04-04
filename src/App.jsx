@@ -7,12 +7,10 @@ import {
   Menu, 
   X, 
   Mail,
-  Youtube,
-  ExternalLink,
-  Facebook
+  ExternalLink
 } from 'lucide-react';
 
-// --- CUSTOM BRAND ICONS (SVG) ---
+// --- BULLETPROOF CUSTOM BRAND ICONS (Fixed Alignment & Cutoff) ---
 const InstagramIcon = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
 );
@@ -30,10 +28,14 @@ const AppleMusicIcon = (props) => (
 );
 
 const AmazonIcon = (props) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 14c.5 2 4 4.5 9 4.5s8.5-2.5 9-4.5"/><path d="M17 12c-2 4-4.5 4-7 4"/></svg>
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14c.5 2 4 4.5 8 4.5s7.5-2.5 8-4.5"/><path d="M16 12.5c-1 3-4 3-5 3"/></svg>
 );
 
-// --- VERIFIED LATEST RELEASES ---
+const FacebookIcon = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+);
+
+// --- VERIFIED LATEST RELEASES DATA ---
 const LATEST_RELEASES = [
   { 
     artist: "marilyn torres", 
@@ -184,15 +186,15 @@ export default function App() {
       {/* --- LATEST RELEASES --- */}
       <section id="catalog" className="py-48 lg:py-64 bg-white text-black">
         <div className="container mx-auto px-8">
-          <div className="max-w-3xl mb-32">
-            <h2 className="text-8xl md:text-[10rem] font-bold lowercase tracking-tighter leading-none mb-8 italic text-left">latest releases</h2>
-            <p className="text-black/40 text-xl md:text-2xl lowercase leading-tight font-medium text-left">available for streaming and digital acquisition.</p>
+          <div className="max-w-3xl mb-32 text-left">
+            <h2 className="text-8xl md:text-[10rem] font-bold lowercase tracking-tighter leading-none mb-8 italic">latest releases</h2>
+            <p className="text-black/40 text-xl md:text-2xl lowercase leading-tight font-medium">available for streaming and digital acquisition.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-20">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-24">
             {LATEST_RELEASES.map((item, idx) => (
               <div key={idx} className="group flex flex-col">
-                <div className="aspect-square bg-black/5 overflow-hidden rounded-2xl shadow-2xl relative mb-8">
+                <div className="aspect-square bg-black/5 overflow-hidden rounded-2xl shadow-2xl relative mb-10">
                   <img 
                     src={item.cover} 
                     alt={item.title} 
@@ -206,39 +208,39 @@ export default function App() {
                     <h4 className="text-4xl font-bold lowercase tracking-tight italic leading-none">{item.title}</h4>
                     <span className="text-black/20 font-black italic text-sm">{item.year}</span>
                   </div>
-                  <p className="text-black/60 text-lg font-bold lowercase mb-4">{item.artist}</p>
+                  <p className="text-black/60 text-lg font-bold lowercase mb-6">{item.artist}</p>
                   
-                  <p className="text-[10px] font-black text-black/40 uppercase tracking-[0.2em] leading-relaxed mb-8 flex-1">
+                  <p className="text-[10px] font-black text-black/40 uppercase tracking-[0.2em] leading-relaxed mb-10 flex-1">
                     {item.work}
                   </p>
                   
-                  <div className="flex flex-col gap-2 mt-auto">
+                  <div className="flex flex-col gap-3 mt-auto">
                     <a 
                       href={item.youtubeUrl} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="flex items-center justify-between px-5 py-4 bg-black text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors rounded-lg group/btn"
+                      className="flex items-center justify-between px-6 py-5 bg-black text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors rounded-xl group/btn"
                     >
-                      <span className="flex items-center gap-3"><YoutubeIcon size={16} /> YouTube Music</span>
-                      <ArrowUpRight size={14} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
+                      <span className="flex items-center gap-4"><YoutubeIcon size={18} /> YouTube Music</span>
+                      <ArrowUpRight size={16} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
                     </a>
                     <a 
                       href={item.appleUrl} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="flex items-center justify-between px-5 py-4 border-2 border-black text-black text-[10px] font-black uppercase tracking-widest hover:bg-[#fa243c] hover:border-[#fa243c] hover:text-white transition-all rounded-lg group/btn"
+                      className="flex items-center justify-between px-6 py-5 border-2 border-black text-black text-[10px] font-black uppercase tracking-widest hover:bg-[#fa243c] hover:border-[#fa243c] hover:text-white transition-all rounded-xl group/btn"
                     >
-                      <span className="flex items-center gap-3"><AppleMusicIcon size={16} /> Apple Music</span>
-                      <ArrowUpRight size={14} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
+                      <span className="flex items-center gap-4"><AppleMusicIcon size={18} /> Apple Music</span>
+                      <ArrowUpRight size={16} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
                     </a>
                     <a 
                       href={item.amazonUrl} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="flex items-center justify-between px-5 py-4 border-2 border-black text-black text-[10px] font-black uppercase tracking-widest hover:bg-orange-500 hover:border-orange-500 hover:text-white transition-all rounded-lg group/btn"
+                      className="flex items-center justify-between px-6 py-5 border-2 border-black text-black text-[10px] font-black uppercase tracking-widest hover:bg-[#ff9900] hover:border-[#ff9900] hover:text-white transition-all rounded-xl group/btn"
                     >
-                      <span className="flex items-center gap-3"><AmazonIcon size={16} /> Amazon Music</span>
-                      <ArrowUpRight size={14} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
+                      <span className="flex items-center gap-4"><AmazonIcon size={18} /> Amazon Music</span>
+                      <ArrowUpRight size={16} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
                     </a>
                   </div>
                 </div>
@@ -259,7 +261,7 @@ export default function App() {
                 </h2>
               </div>
               
-              <div className="space-y-6 pt-10">
+              <div className="space-y-8 pt-10">
                 <div className="flex items-center gap-10 text-white/50 hover:text-white transition-all cursor-pointer group">
                   <div className="p-5 rounded-full border border-white/5 group-hover:border-white group-hover:bg-white group-hover:text-black transition-all">
                     <Mail size={24} />
@@ -280,7 +282,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-10 text-white/50 hover:text-white transition-all cursor-pointer group">
                   <div className="p-5 rounded-full border border-white/5 group-hover:border-white group-hover:bg-white group-hover:text-black transition-all">
-                    <Facebook size={24} />
+                    <FacebookIcon size={24} />
                   </div>
                   <span className="text-2xl font-bold tracking-tight italic">facebook.com/djmerkone</span>
                 </div>
@@ -320,7 +322,7 @@ export default function App() {
             <a href="https://youtube.com/@djmerkone" target="_blank" rel="noopener noreferrer" className="hover:opacity-100 transition-opacity hover:text-white"><YoutubeIcon size={32} /></a>
             <a href="https://tiktok.com/@djmerkone" target="_blank" rel="noopener noreferrer" className="hover:opacity-100 transition-opacity hover:text-white"><TikTokIcon size={32} /></a>
             <a href="https://instagram.com/djmerkone" target="_blank" rel="noopener noreferrer" className="hover:opacity-100 transition-opacity hover:text-white"><InstagramIcon size={32} /></a>
-            <a href="https://www.facebook.com/djmerkone/" target="_blank" rel="noopener noreferrer" className="hover:opacity-100 transition-opacity hover:text-white"><Facebook size={32} /></a>
+            <a href="https://www.facebook.com/djmerkone/" target="_blank" rel="noopener noreferrer" className="hover:opacity-100 transition-opacity hover:text-white"><FacebookIcon size={32} /></a>
           </div>
           <div className="text-[10px] text-white/10 font-black lowercase tracking-[0.8em] text-center max-w-md leading-loose uppercase italic">
              &copy; {new Date().getFullYear()} djmerkone music <br /> florida sound engineering / high-end production
