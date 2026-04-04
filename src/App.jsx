@@ -13,7 +13,12 @@ import {
   BookOpen
 } from 'lucide-react';
 
-// --- BULLETPROOF CUSTOM BRAND ICONS (Fixed Alignment & Build Errors) ---
+// --- VERCEL ANALYTICS NOTE ---
+// To use analytics on Vercel, run: npm i @vercel/analytics
+// Then uncomment the following two lines in your local project:
+// import { Analytics } from '@vercel/analytics/react';
+
+// --- BULLETPROOF CUSTOM BRAND ICONS ---
 const InstagramIcon = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
 );
@@ -122,17 +127,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#e5e5e5] font-sans selection:bg-white selection:text-black overflow-x-hidden relative">
+      {/* <Analytics /> -- Uncomment this line after installing @vercel/analytics */}
       
       {/* --- BIO MODAL (WINDOW LAYER) --- */}
       {bioOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 animate-fade-in">
-          {/* Blur Overlay - Click to close */}
           <div 
             className="absolute inset-0 bg-black/60 backdrop-blur-2xl transition-all duration-500 cursor-pointer" 
             onClick={() => setBioOpen(false)}
           ></div>
           
-          {/* The Bio Window */}
           <div className="relative w-full max-w-3xl bg-[#0a0a0a] border border-white/10 p-8 md:p-16 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] max-h-[85vh] overflow-y-auto scrollbar-hide animate-slide-up">
             <button 
               onClick={() => setBioOpen(false)}
@@ -169,7 +173,7 @@ export default function App() {
                 onClick={() => setBioOpen(false)}
                 className="inline-flex items-center gap-4 text-xs font-black uppercase tracking-widest border-b border-white pb-2 hover:opacity-50 transition-opacity text-white"
               >
-                return to vault <ArrowUpRight size={14}/>
+                return to site <ArrowUpRight size={14}/>
               </button>
             </div>
           </div>
@@ -178,7 +182,6 @@ export default function App() {
 
       {/* --- SITE CONTENT LAYER --- */}
       <div className={`transition-all duration-700 ${bioOpen ? 'blur-sm scale-[0.98]' : 'blur-0 scale-100'}`}>
-        {/* --- NAVIGATION --- */}
         <nav className={`fixed top-0 w-full z-50 transition-all duration-500 ${scrolled ? 'bg-black/90 backdrop-blur-xl py-4 border-b border-white/5 shadow-2xl' : 'bg-transparent py-8'}`}>
           <div className="container mx-auto px-8 flex justify-between items-center">
             <div className="text-xl font-bold tracking-tight lowercase flex items-center gap-2 group cursor-pointer text-white" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
@@ -193,7 +196,6 @@ export default function App() {
           </div>
         </nav>
 
-        {/* --- HERO --- */}
         <section id="home" className="relative h-screen flex items-end pb-32 text-left">
           <div className="absolute inset-0 z-0">
             <img src={IMAGES.hero} alt="djmerkone" onError={(e) => handleImageError(e, IMAGES.fallbackHero)} className="w-full h-full object-cover object-center grayscale brightness-[0.35]"/>
@@ -211,7 +213,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* --- ABOUT --- */}
         <section id="about" className="py-48 lg:py-64 bg-[#050505] text-left">
           <div className="container mx-auto px-8">
             <div className="grid lg:grid-cols-12 gap-24 items-start">
@@ -261,7 +262,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* --- LATEST RELEASES --- */}
         <section id="catalog" className="py-48 lg:py-64 bg-white text-black text-left">
           <div className="container mx-auto px-8">
             <div className="max-w-3xl mb-32">
@@ -292,7 +292,7 @@ export default function App() {
                         <ArrowUpRight size={16} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
                       </a>
                       <a href={item.amazonUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between px-6 py-5 border-2 border-black text-black text-[10px] font-black uppercase tracking-widest hover:bg-[#ff9900] hover:border-[#ff9900] hover:text-white transition-all rounded-xl group/btn">
-                        <span className="flex items-center gap-4"><AmazonIcon size={18} /> Amazon Music</span>
+                        <span className="flex items-center gap-3"><AmazonIcon size={20} /> Amazon Music</span>
                         <ArrowUpRight size={16} className="group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
                       </a>
                     </div>
@@ -303,7 +303,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* --- CONTACT --- */}
         <section id="contact" className="py-48 lg:py-64 bg-[#050505] text-left">
           <div className="container mx-auto px-8">
             <div className="grid lg:grid-cols-2 gap-40 items-start">
@@ -338,10 +337,10 @@ export default function App() {
                 ) : (
                   <form className="space-y-14" onSubmit={handleSubmit}>
                     <div className="space-y-10 text-white text-left">
-                      <div className="space-y-4"><label className="text-[11px] font-black lowercase tracking-[0.5em] text-white/20 uppercase ml-1">artist identity</label><input type="text" required placeholder="name / moniker" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-transparent border-b border-white/10 py-6 focus:border-white outline-none transition-all placeholder:text-white/5 lowercase text-3xl font-light italic" /></div>
-                      <div className="space-y-4"><label className="text-[11px] font-black lowercase tracking-[0.5em] text-white/20 uppercase ml-1">contact channel</label><input type="email" required placeholder="email address" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full bg-transparent border-b border-white/10 py-6 focus:border-white outline-none transition-all placeholder:text-white/5 lowercase text-3xl font-light italic" /></div>
+                      <div className="space-y-4"><label className="text-[11px] font-black lowercase tracking-[0.5em] text-white/20 uppercase ml-1">artist identity</label><input type="text" required name="name" placeholder="name / moniker" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-transparent border-b border-white/10 py-6 focus:border-white outline-none transition-all placeholder:text-white/5 lowercase text-3xl font-light italic" /></div>
+                      <div className="space-y-4"><label className="text-[11px] font-black lowercase tracking-[0.5em] text-white/20 uppercase ml-1">contact channel</label><input type="email" required name="email" placeholder="email address" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full bg-transparent border-b border-white/10 py-6 focus:border-white outline-none transition-all placeholder:text-white/5 lowercase text-3xl font-light italic" /></div>
                     </div>
-                    <div className="space-y-4 text-white text-left"><label className="text-[11px] font-black lowercase tracking-[0.5em] text-white/20 uppercase ml-1">the vision</label><textarea required placeholder="describe the sonic direction..." rows="3" value={formData.vibe} onChange={(e) => setFormData({...formData, vibe: e.target.value})} className="w-full bg-transparent border-b border-white/10 py-6 focus:border-white outline-none transition-all placeholder:text-white/5 lowercase text-3xl font-light italic"></textarea></div>
+                    <div className="space-y-4 text-white text-left"><label className="text-[11px] font-black lowercase tracking-[0.5em] text-white/20 uppercase ml-1">the vision</label><textarea required name="message" placeholder="describe the sonic direction..." rows="3" value={formData.vibe} onChange={(e) => setFormData({...formData, vibe: e.target.value})} className="w-full bg-transparent border-b border-white/10 py-6 focus:border-white outline-none transition-all placeholder:text-white/5 lowercase text-3xl font-light italic"></textarea></div>
                     <button type="submit" disabled={formStatus === 'sending'} className="flex items-center gap-10 text-4xl font-bold lowercase group border-b-2 border-white pb-4 hover:gap-16 transition-all italic w-full justify-between text-white disabled:opacity-50">
                       {formStatus === 'sending' ? <span className="flex items-center gap-4 italic lowercase"><Loader2 className="animate-spin" /> sending...</span> : <>submit inquiry <ArrowUpRight size={44} /></>}
                     </button>
@@ -352,7 +351,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* --- FOOTER --- */}
         <footer className="py-40 border-t border-white/5 bg-[#050505]">
           <div className="container mx-auto px-8 flex flex-col items-center gap-20">
             <div className="text-5xl font-bold lowercase tracking-tighter italic text-white cursor-pointer group flex items-center gap-4" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
