@@ -25,6 +25,7 @@ const YoutubeIcon = (props) => (
 
 // --- DISCOGRAPHY DATA WITH UPDATED YOUTUBE IDs ---
 const DISCOGRAPHY = [
+  // MASTERING
   { 
     artist: "luis marte", title: "the chase", version: "full album/ep", role: "mastering", genre: "freestyle / latin", year: "2022",
     yId: "6WhWDeE0-M0"
@@ -42,6 +43,12 @@ const DISCOGRAPHY = [
     yId: "3AtDnEC4zak"
   },
   { 
+    artist: "charlie xo / a'lisa b", title: "possessed by love", version: "maxi-single", role: "mastering", genre: "freestyle / dance", year: "2020",
+    yId: "dQw4w9WgXcQ"
+  },
+  
+  // PRODUCER
+  { 
     artist: "marilyn torres", title: "callin' for love", version: "original", role: "producer", genre: "r&b / freestyle", year: "2025",
     yId: "jNQXAC9IVRw"
   },
@@ -50,9 +57,29 @@ const DISCOGRAPHY = [
     yId: "L_jWHffIx5E"
   },
   { 
+    artist: "jase david", title: "unbreakable", version: "original", role: "producer", genre: "r&b", year: "2025",
+    yId: "kJQP7kiw5Fk"
+  },
+  { 
+    artist: "luis marte", title: "no different", version: "original", role: "producer", genre: "latin urban", year: "2025",
+    yId: "9bZkp7q19f0"
+  },
+  { 
+    artist: "rolando montalvo", title: "take on me", version: "original", role: "producer", genre: "80s synth / pop", year: "2024",
+    yId: "H8ZpHe_Oq3Y"
+  },
+  
+  // REMIXER
+  { 
     artist: "depeche mode", title: "precious", version: "dmo freestyle remix", role: "remixer", genre: "alternative / dance", year: "2014",
     yId: "H8ZpHe_Oq3Y"
   },
+  { 
+    artist: "mia martina", title: "latin mood", version: "dmo's freestyle remix", role: "remixer", genre: "latin / pop", year: "2014",
+    yId: "y6120QOlsfU"
+  },
+  
+  // PRIMARY ARTIST
   { 
     artist: "djmerkone", title: "the anomaly", version: "original", role: "artist", genre: "experimental / hip-hop", year: "2022",
     yId: "kJQP7kiw5Fk"
@@ -282,55 +309,6 @@ export default function App() {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         html { scroll-behavior: smooth; }
-      `}} />
-    </div>
-  );
-}copy; {new Date().getFullYear()} djmerkone music <br /> florida sound engineering / high-end production
-          </div>
-        </div>
-      </footer>
-
-      {/* Global Style Injector */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&display=swap');
-        
-        body {
-          font-family: 'Inter', sans-serif;
-          background-color: #050505;
-          margin: 0;
-        }
-
-        .animate-fade-in {
-          animation: fadeIn 2s ease-out forwards;
-        }
-        .animate-slide-up {
-          animation: slideUp 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideUp {
-          from { transform: translateY(100px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        html {
-          scroll-behavior: smooth;
-        }
-        ::placeholder {
-          font-style: italic;
-          opacity: 0.1;
-        }
-        ::-webkit-scrollbar {
-          width: 5px;
-        }
-        ::-webkit-scrollbar-track {
-          background: #050505;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: #1a1a1a;
-          border-radius: 10px;
-        }
       `}} />
     </div>
   );
