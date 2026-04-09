@@ -31,35 +31,31 @@ export default function App() {
             font-family: 'ButterPress', sans-serif;
           }
 
-          /* Fine, chaotic static grain animation (Smooth) */
-          @keyframes crt-grain {
-            0%, 100% { transform: translate(0, 0); }
-            10% { transform: translate(-1%, -1%); }
-            20% { transform: translate(1%, 1%); }
-            30% { transform: translate(-2%, -1%); }
-            40% { transform: translate(1%, -2%); }
-            50% { transform: translate(-1%, 2%); }
-            60% { transform: translate(2%, 1%); }
-            70% { transform: translate(-2%, 2%); }
-            80% { transform: translate(1%, -1%); }
-            90% { transform: translate(-1%, -2%); }
+          /* True TV Static overlay (Snaps positions randomly to mimic real chaotic noise) */
+          @keyframes tv-static {
+            0%   { background-position: 0px 0px; }
+            20%  { background-position: -50px 100px; }
+            40%  { background-position: 80px -40px; }
+            60%  { background-position: -30px 20px; }
+            80%  { background-position: 100px 50px; }
+            100% { background-position: 0px 0px; }
           }
 
-          /* Highly erratic movement specifically for the RGB noise artifacts (Smooth) */
+          /* Highly erratic movement specifically for the RGB noise artifacts */
           @keyframes rgb-noise-dance {
             0%, 100% { transform: translate(0, 0); }
-            10% { transform: translate(-2%, -2%); }
-            20% { transform: translate(2%, 2%); }
-            30% { transform: translate(-1%, 3%); }
-            40% { transform: translate(3%, -1%); }
-            50% { transform: translate(-3%, 1%); }
-            60% { transform: translate(1%, 3%); }
-            70% { transform: translate(-2%, -2%); }
-            80% { transform: translate(2%, 1%); }
-            90% { transform: translate(-1%, -3%); }
+            10% { transform: translate(-2px, -2px); }
+            20% { transform: translate(2px, 2px); }
+            30% { transform: translate(-1px, 3px); }
+            40% { transform: translate(3px, -1px); }
+            50% { transform: translate(-3px, 1px); }
+            60% { transform: translate(1px, 3px); }
+            70% { transform: translate(-2px, -2px); }
+            80% { transform: translate(2px, 1px); }
+            90% { transform: translate(-1px, -3px); }
           }
 
-          /* Random opacity flicker for the RGB dead pixels (Smooth) */
+          /* Random opacity flicker for the RGB dead pixels */
           @keyframes artifacts-flicker {
             0%, 100% { opacity: 0.05; }
             10% { opacity: 0.10; }
@@ -68,26 +64,18 @@ export default function App() {
             55% { opacity: 0.06; }
             90% { opacity: 0.08; }
           }
-          
-          /* NEW: Random Horizontal Tuning Static Bleed */
-          @keyframes tuning-bleed {
-            0%, 88%, 94%, 100% { opacity: 0; transform: translateY(0) scaleY(1); }
-            90% { opacity: 0.15; transform: translateY(-20vh) scaleY(3); }
-            92% { opacity: 0.25; transform: translateY(30vh) scaleY(2); }
-            96% { opacity: 0.10; transform: translateY(10vh) scaleY(4); }
-          }
 
-          /* Animated edge bloom keyframes (Smooth, subtle shifting) */
-          @keyframes edge-breathe-1 {
-            0% { transform: translate(1px, 1px); opacity: 0.4; }
-            50% { transform: translate(-1px, 0px); opacity: 0.8; }
-            100% { transform: translate(0px, -1px); opacity: 0.4; }
+          /* Pixelated, glitchy edge bloom (Rapid, tight snapping movements) */
+          @keyframes pixel-buzz-1 {
+            0%, 100% { transform: translate(1px, -1px); opacity: 0.9; }
+            33% { transform: translate(-1px, 1px); opacity: 0.5; }
+            66% { transform: translate(0px, -1px); opacity: 1; }
           }
           
-          @keyframes edge-breathe-2 {
-            0% { transform: translate(-1px, -1px); opacity: 0.7; }
-            50% { transform: translate(0px, 1px); opacity: 0.3; }
-            100% { transform: translate(1px, 0px); opacity: 0.7; }
+          @keyframes pixel-buzz-2 {
+            0%, 100% { transform: translate(-1px, 1px); opacity: 0.6; }
+            33% { transform: translate(1px, 0px); opacity: 1; }
+            66% { transform: translate(-1px, -1px); opacity: 0.4; }
           }
 
           /* The slow, rolling tracking line artifact */
@@ -118,18 +106,10 @@ export default function App() {
             98%, 100% { opacity: 0; filter: blur(12px); transform: scale(1.05) skewX(0deg); color: transparent; text-shadow: none; }
           }
 
-          /* --- 60 FPS SMOOTH TIMING --- */
-
-          .animate-grain {
-            animation: crt-grain 0.4s linear infinite;
-          }
+          /* --- ANIMATION ASSIGNMENTS --- */
 
           .animate-artifacts {
             animation: rgb-noise-dance 0.4s linear infinite, artifacts-flicker 4s ease-in-out infinite;
-          }
-          
-          .animate-tuning {
-            animation: tuning-bleed 8s ease-in-out infinite;
           }
 
           .animate-roll {
@@ -144,19 +124,18 @@ export default function App() {
             animation: morph-2 12s ease-in-out infinite;
           }
 
+          /* Glitchy edge outlines */
           .bloom-layer-1 {
-            animation: edge-breathe-1 3s ease-in-out infinite alternate;
+            animation: pixel-buzz-1 0.15s steps(2) infinite;
             color: transparent; 
-            -webkit-text-stroke: 2px rgba(255, 255, 255, 0.7); /* Only affects the edge/outline */
-            filter: blur(2px);
+            -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.9); 
             mix-blend-mode: screen;
           }
           
           .bloom-layer-2 {
-            animation: edge-breathe-2 4s ease-in-out infinite alternate;
+            animation: pixel-buzz-2 0.2s steps(3) infinite;
             color: transparent; 
-            -webkit-text-stroke: 1.5px rgba(200, 200, 200, 0.9); /* Only affects the edge/outline */
-            filter: blur(1px);
+            -webkit-text-stroke: 1px rgba(220, 220, 220, 0.7); 
             mix-blend-mode: screen;
           }
           
@@ -192,10 +171,10 @@ export default function App() {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0)_100%)] z-0"></div>
 
             {/* 3. Foreground Content (Phosphor Morphing Custom Font with inner outline bloom) */}
-            {/* The main text remains completely solid black, only the transparent stroked overlays breathe on the edges */}
             <div className="relative z-10 flex items-center justify-center w-full h-64">
               <h1 className="absolute text-7xl md:text-[9rem] text-black tracking-tight lowercase custom-font morph-text-1 text-center w-full leading-none">
                 djmerkone
+                {/* Notice the filter: blur is gone, creating sharp, pixelated-feeling static edges */}
                 <span className="absolute inset-0 bloom-layer-1 pointer-events-none" aria-hidden="true">djmerkone</span>
                 <span className="absolute inset-0 bloom-layer-2 pointer-events-none" aria-hidden="true">djmerkone</span>
               </h1>
@@ -209,11 +188,13 @@ export default function App() {
 
           {/* --- CRT EFFECTS LAYERS --- */}
           
-          {/* 4. Fine Animated Grain */}
+          {/* 4. TRUE FULL-SCREEN TV STATIC (Tiled background rapidly shifting positions) */}
           <div 
-            className="absolute -inset-[10%] w-[120%] h-[120%] z-20 pointer-events-none opacity-[0.08] mix-blend-multiply animate-grain"
+            className="absolute -inset-[10%] w-[120%] h-[120%] z-20 pointer-events-none opacity-[0.14] mix-blend-multiply"
             style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              backgroundSize: '200px 200px', // Tiles the noise so it remains high-fidelity
+              animation: 'tv-static 0.3s steps(5) infinite' // Snaps positions like true TV snow
             }}
           ></div>
 
@@ -225,17 +206,6 @@ export default function App() {
               filter: 'contrast(150%) saturate(300%)',
             }}
           ></div>
-
-          {/* 4.75 Random Tuning Interference (Bleeds in from background) */}
-          <div className="absolute inset-0 z-28 pointer-events-none mix-blend-difference animate-tuning">
-            <div 
-              className="absolute inset-0 opacity-40 animate-grain"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-                backgroundSize: '100% 12px',
-              }}
-            ></div>
-          </div>
 
           {/* 5. Static Scanlines */}
           <div 
@@ -265,12 +235,14 @@ export default function App() {
 
           {/* --- BOOT SEQUENCE OVERLAYS --- */}
           
-          {/* Intense Static Burst */}
+          {/* Intense Static Burst (Reuses the true TV static for continuity) */}
           <div className={`absolute inset-0 z-[48] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
              <div 
-              className="absolute inset-0 opacity-80 mix-blend-difference animate-grain"
+              className="absolute inset-0 opacity-80 mix-blend-difference"
               style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='4' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                backgroundSize: '150px 150px',
+                animation: 'tv-static 0.2s steps(4) infinite'
               }}
             ></div>
           </div>
