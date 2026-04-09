@@ -66,12 +66,29 @@ export default function App() {
                2px -2px 0 #000,
               -2px  2px 0 #000,
                2px  2px 0 #000,
-               0 0 15px rgba(255,255,255,0.7),
-               0 0 30px rgba(255,255,255,0.4);
+               -4px 0 2px rgba(255, 0, 80, 0.6), /* Stronger Magenta aberration */
+               4px 0 2px rgba(0, 255, 255, 0.6), /* Stronger Cyan aberration */
+               0 0 20px rgba(255,255,255,0.8),
+               0 0 40px rgba(255,255,255,0.4);
           }
 
           @media (min-width: 768px) {
             .vcr-font { font-size: 6rem; }
+          }
+
+          /* Faster, more chaotic snapping for the RGB artifacts */
+          @keyframes artifact-hop {
+            0%   { background-position: 0% 0%; }
+            10%  { background-position: 15% -10%; }
+            20%  { background-position: -20% 15%; }
+            30%  { background-position: 10% 25%; }
+            40%  { background-position: -15% -20%; }
+            50%  { background-position: 25% 5%; }
+            60%  { background-position: -10% -15%; }
+            70%  { background-position: 20% 20%; }
+            80%  { background-position: -25% 10%; }
+            90%  { background-position: 5% -25%; }
+            100% { background-position: 0% 0%; }
           }
 
           /* INTENSE GLOBAL ANALOG BLOOM */
@@ -79,8 +96,8 @@ export default function App() {
             position: absolute;
             inset: 0;
             z-index: 55;
-            filter: blur(18px) brightness(1.6) contrast(115%);
-            opacity: 0.55;
+            filter: blur(20px) brightness(1.7) contrast(110%);
+            opacity: 0.6;
             mix-blend-mode: screen;
             pointer-events: none;
             background: inherit;
@@ -99,13 +116,13 @@ export default function App() {
             position: absolute;
             inset: 0;
             z-index: 60;
-            background: radial-gradient(circle, transparent 35%, rgba(0,0,0,0.55) 100%);
-            box-shadow: inset 0 0 160px rgba(0,0,0,0.85);
+            background: radial-gradient(circle, transparent 30%, rgba(0,0,0,0.6) 100%);
+            box-shadow: inset 0 0 180px rgba(0,0,0,0.9);
             pointer-events: none;
           }
           
           .global-bloom-wrap {
-            filter: blur(0.7px) contrast(110%) brightness(1.1);
+            filter: blur(0.8px) contrast(115%) brightness(1.1);
           }
 
           .noise-video {
@@ -116,6 +133,25 @@ export default function App() {
             object-fit: cover;
             /* Boost the video's contrast to make the whites searing */
             filter: contrast(160%) brightness(1.3) saturate(140%);
+          }
+
+          /* Full-width RGB Artifacts Overlay */
+          .rgb-artifacts-full {
+            position: absolute;
+            inset: -20%;
+            width: 140%;
+            height: 140%;
+            /* Updated Frequency to prevent vertical banding artifacts */
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.35 0.25' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            background-size: 512px 512px;
+            animation: artifact-hop 0.1s steps(4) infinite;
+            image-rendering: pixelated;
+            /* Intense RGB pop */
+            filter: contrast(1200%) saturate(500%) brightness(1.3);
+            mix-blend-mode: screen;
+            opacity: 0.25;
+            pointer-events: none;
+            z-index: 54;
           }
         `}
       </style>
@@ -140,28 +176,28 @@ export default function App() {
             playsInline
           />
 
-          {/* 2. MAIN CONTENT (COMING SOON) */}
+          {/* 2. FULL-WIDTH RGB ARTIFACTS OVERLAY */}
+          <div className="rgb-artifacts-full"></div>
+
+          {/* 3. MAIN CONTENT (COMING SOON) */}
           <div className={`relative z-10 flex flex-col items-center justify-center w-full px-4 text-center transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
             <h1 className="vcr-font select-none">
               COMING SOON
             </h1>
           </div>
 
-          {/* 3. BLOOM ENGINE (Luminous glow bleed) */}
+          {/* 4. BLOOM ENGINE (Luminous glow bleed) */}
           <div className="heavy-bloom"></div>
 
-          {/* 4. SCANLINES & CRT ARTIFACTS */}
+          {/* 5. SCANLINES & CRT ARTIFACTS */}
           <div className="scanlines-overlay"></div>
           
-          {/* Rolling shutter removed as requested */}
-
-          {/* 5. VIGNETTE & TUBE DEPTH */}
+          {/* 6. VIGNETTE & TUBE DEPTH */}
           <div className="crt-vignette-bezel"></div>
 
           {/* --- TV POWER ON SEQUENCE --- */}
           <div className={`absolute inset-0 z-[100] bg-black pointer-events-none transition-opacity duration-700 ${bootStage === 'off' ? 'opacity-100' : 'opacity-0'}`}></div>
           <div className={`absolute inset-0 z-[101] pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
-             {/* Power-on static flash using a brighter version of the video */}
              <video src="/noise.mp4" className="noise-video opacity-100 contrast-[300%] brightness-150" loop muted autoPlay playsInline />
           </div>
 
