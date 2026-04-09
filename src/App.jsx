@@ -1,6 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function App() {
+  const [bootStage, setBootStage] = useState('off'); // 'off', 'static', 'on'
+
+  useEffect(() => {
+    // Sequence the CRT boot animation
+    const t1 = setTimeout(() => setBootStage('static'), 600); // Black screen for 600ms
+    const t2 = setTimeout(() => setBootStage('on'), 1200); // Intense static for 600ms
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   return (
     <>
       <style>
@@ -34,13 +47,6 @@ export default function App() {
             100% { transform: translateY(110vh); }
           }
 
-          /* Chromatic Aberration breathing effect on the text */
-          @keyframes text-aberration {
-            0% { text-shadow: 2px 0 1px rgba(255,0,0,0.6), -2px 0 1px rgba(0,255,255,0.6); }
-            50% { text-shadow: 3px 0 1px rgba(255,0,0,0.4), -1px 0 1px rgba(0,255,255,0.8); }
-            100% { text-shadow: 1px 0 1px rgba(255,0,0,0.8), -3px 0 1px rgba(0,255,255,0.4); }
-          }
-
           .animate-grain {
             animation: crt-grain 0.3s steps(10) infinite;
           }
@@ -51,10 +57,6 @@ export default function App() {
 
           .animate-roll {
             animation: crt-roll 7s linear infinite;
-          }
-
-          .crt-text {
-            animation: text-aberration 3s infinite alternate;
           }
           
           /* The magic blur/contrast combo that causes Phosphor Bloom */
@@ -70,28 +72,31 @@ export default function App() {
         {/* The CRT Screen itself - Rounded corners, clipped overflow, and bloom applied here */}
         <div className="relative w-full h-full bg-white rounded-[30px] md:rounded-[50px] overflow-hidden flex items-center justify-center font-sans selection:bg-black selection:text-white animate-flicker crt-bloom shadow-[0_0_20px_rgba(0,0,0,1)] ring-4 ring-[#111]">
           
-          {/* 1. Background Image Layer */}
-          <img 
-            src="/bg1.png" 
-            alt="djmerkone background"
-            className="absolute inset-0 w-full h-full object-cover object-center opacity-40"
-          />
-
-          {/* 2. Whitewash Overlay */}
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0)_100%)] z-0"></div>
-
-          {/* 3. Foreground Content */}
-          <div className="relative z-10 flex flex-col items-center justify-center p-8 text-center">
-            {/* Added crt-text class for the red/cyan chromatic aberration */}
-            <h1 className="text-5xl md:text-8xl font-black text-black tracking-tighter mb-4 lowercase crt-text">
-              djmerkone
-            </h1>
+          {/* Main Content Wrapper - Animates in after the boot sequence */}
+          <div className={`absolute inset-0 transition-all duration-[1500ms] ease-out flex items-center justify-center ${bootStage === 'on' ? 'opacity-100 scale-100 blur-0' : 'opacity-0 scale-105 blur-md'}`}>
             
-            <div className="h-[2px] w-full max-w-[200px] bg-black/40 mb-6 crt-text"></div>
-            
-            <h2 className="text-lg md:text-2xl font-light text-black tracking-[0.4em] uppercase crt-text">
-              coming soon
-            </h2>
+            {/* 1. Background Image Layer */}
+            <img 
+              src="/bg1.png" 
+              alt="djmerkone background"
+              className="absolute inset-0 w-full h-full object-cover object-center opacity-40"
+            />
+
+            {/* 2. Whitewash Overlay */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0)_100%)] z-0"></div>
+
+            {/* 3. Foreground Content (Removed Chromatic Aberration) */}
+            <div className="relative z-10 flex flex-col items-center justify-center p-8 text-center">
+              <h1 className="text-5xl md:text-8xl font-black text-black tracking-tighter mb-4 lowercase">
+                djmerkone
+              </h1>
+              
+              <div className="h-[2px] w-full max-w-[200px] bg-black/40 mb-6"></div>
+              
+              <h2 className="text-lg md:text-2xl font-light text-black tracking-[0.4em] uppercase">
+                coming soon
+              </h2>
+            </div>
           </div>
 
           {/* --- CRT EFFECTS LAYERS --- */}
@@ -113,8 +118,7 @@ export default function App() {
             }}
           ></div>
 
-          {/* 6. NEW: RGB Phosphor Sub-pixel Artifacts */}
-          {/* Extremely tight vertical red/green/blue stripes multiplying against the background */}
+          {/* 6. RGB Phosphor Sub-pixel Artifacts */}
           <div 
             className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply opacity-[0.12]"
             style={{
@@ -131,8 +135,23 @@ export default function App() {
             }}
           ></div>
 
+          {/* --- BOOT SEQUENCE OVERLAYS --- */}
+          
+          {/* Intense Static Burst */}
+          <div className={`absolute inset-0 z-[48] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
+             <div 
+              className="absolute inset-0 opacity-80 mix-blend-difference animate-grain"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='4' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              }}
+            ></div>
+          </div>
+
+          {/* Black Screen (TV Off) */}
+          <div className={`absolute inset-0 z-[49] bg-black pointer-events-none transition-opacity duration-150 ${bootStage === 'off' ? 'opacity-100' : 'opacity-0'}`}></div>
+
           {/* 8. Curved CRT Glass Tube Inner Shadow */}
-          {/* Softens the extreme edges to simulate thick glass tube rounding */}
+          {/* Sits above the boot sequence layers so the glass reflection remains visible even when TV is "off" */}
           <div className="absolute inset-0 z-50 pointer-events-none shadow-[inset_0_0_100px_rgba(0,0,0,0.8),_inset_0_0_30px_rgba(0,0,0,0.6)]"></div>
 
         </div>
