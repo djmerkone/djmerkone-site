@@ -59,29 +59,29 @@ export default function App() {
             90% { transform: translate(-1%, -3%); }
           }
 
-          /* Random opacity flicker for the RGB dead pixels */
+          /* Random opacity flicker for the RGB dead pixels (toned down heavily) */
           @keyframes artifacts-flicker {
             0%, 100% { opacity: 0.05; }
-            10% { opacity: 0.20; }
-            20% { opacity: 0.02; }
-            50% { opacity: 0.25; }
-            55% { opacity: 0.08; }
-            90% { opacity: 0.15; }
+            10% { opacity: 0.10; }
+            20% { opacity: 0.03; }
+            50% { opacity: 0.12; }
+            55% { opacity: 0.06; }
+            90% { opacity: 0.08; }
           }
 
-          /* Subtle micro-flicker for the static RGB subpixel phosphor mask */
-          @keyframes phosphor-flicker {
-            0%, 100% { opacity: 0.12; }
-            50% { opacity: 0.06; }
+          /* Animated pixelated edge bloom keyframes */
+          @keyframes pixel-bloom-1 {
+            0%, 100% { transform: translate(1.5px, 1.5px); opacity: 0.5; }
+            25% { transform: translate(-0.5px, 1px); opacity: 0.7; }
+            50% { transform: translate(1px, -0.5px); opacity: 0.4; }
+            75% { transform: translate(-1px, 1.5px); opacity: 0.8; }
           }
-
-          /* Subtle brightness flicker mimicking power fluctuations */
-          @keyframes crt-flicker {
-            0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
-            20% { opacity: 0.92; }
-            22% { opacity: 0.88; }
-            24% { opacity: 0.95; }
-            55% { opacity: 0.90; }
+          
+          @keyframes pixel-bloom-2 {
+            0%, 100% { transform: translate(-1.5px, -1.5px); opacity: 0.6; }
+            25% { transform: translate(0.5px, -1px); opacity: 0.4; }
+            50% { transform: translate(-1px, 0.5px); opacity: 0.8; }
+            75% { transform: translate(1.5px, -1px); opacity: 0.5; }
           }
 
           /* The slow, rolling tracking line artifact */
@@ -91,7 +91,6 @@ export default function App() {
           }
 
           /* Realistic Phosphor Ghosting Morph - Text 1 (djmerkone) */
-          /* Incorporates deflection beam separation (red/cyan) and phosphor decay (green/purple) */
           @keyframes morph-1 {
             0%, 42% { opacity: 1; filter: blur(0px); transform: scale(1) skewX(0deg); color: black; text-shadow: none; }
             43% { opacity: 0.9; filter: blur(2px); transform: scale(1.02) skewX(-12deg); color: #222; text-shadow: 8px 0 2px rgba(0,255,255,0.9), -8px 0 2px rgba(255,0,0,0.9); }
@@ -113,35 +112,48 @@ export default function App() {
             98%, 100% { opacity: 0; filter: blur(12px); transform: scale(1.05) skewX(0deg); color: transparent; text-shadow: none; }
           }
 
+          /* --- 24 FPS ANIMATION TIMING --- */
+          /* Math: duration(seconds) * 24fps = total steps */
+
           .animate-grain {
-            animation: crt-grain 0.3s steps(10) infinite;
+            animation: crt-grain 0.33s steps(8) infinite;
           }
 
           .animate-artifacts {
-            animation: rgb-noise-dance 0.3s steps(10) infinite, artifacts-flicker 3s infinite steps(2);
+            animation: rgb-noise-dance 0.33s steps(8) infinite, artifacts-flicker 3s steps(72) infinite;
           }
 
-          .animate-phosphor {
-            animation: phosphor-flicker 0.15s infinite;
-          }
-          
           .animate-flicker {
-            animation: crt-flicker 5s infinite;
+            animation: crt-flicker 5s steps(120) infinite;
           }
 
           .animate-roll {
-            animation: crt-roll 7s linear infinite;
+            animation: crt-roll 7s steps(168) infinite;
           }
 
           .morph-text-1 {
-            animation: morph-1 12s infinite linear;
+            animation: morph-1 12s steps(288) infinite;
           }
 
           .morph-text-2 {
-            animation: morph-2 12s infinite linear;
+            animation: morph-2 12s steps(288) infinite;
+          }
+
+          .bloom-layer-1 {
+            animation: pixel-bloom-1 0.16s steps(4) infinite;
+            color: rgba(220, 255, 255, 0.7); /* Cyan-ish white */
+            mix-blend-mode: screen;
+            filter: blur(0.5px);
           }
           
-          /* The magic blur/contrast combo that causes Phosphor Bloom */
+          .bloom-layer-2 {
+            animation: pixel-bloom-2 0.21s steps(5) infinite;
+            color: rgba(255, 220, 255, 0.7); /* Magenta-ish white */
+            mix-blend-mode: screen;
+            filter: blur(0.5px);
+          }
+          
+          /* The magic blur/contrast combo that causes overall soft focus */
           .crt-bloom {
             filter: blur(0.8px) contrast(130%) saturate(110%);
           }
@@ -151,8 +163,8 @@ export default function App() {
       {/* Outer TV Casing - Black background with padding to create the physical bezel */}
       <div className="relative w-full h-screen bg-[#050505] p-2 sm:p-4 md:p-8 flex items-center justify-center overflow-hidden">
         
-        {/* The CRT Screen itself - Rounded corners, clipped overflow, and bloom applied here */}
-        <div className="relative w-full h-full bg-white rounded-[30px] md:rounded-[50px] overflow-hidden flex items-center justify-center selection:bg-black selection:text-white animate-flicker crt-bloom shadow-[0_0_20px_rgba(0,0,0,1)] ring-4 ring-[#111]">
+        {/* The CRT Screen itself - Removed overall flicker for comfort, kept soft bloom and rounded edges */}
+        <div className="relative w-full h-full bg-white rounded-[30px] md:rounded-[50px] overflow-hidden flex items-center justify-center selection:bg-black selection:text-white crt-bloom shadow-[0_0_20px_rgba(0,0,0,1)] ring-4 ring-[#111]">
           
           {/* Main Content Wrapper - Animates in after the boot sequence */}
           <div className={`absolute inset-0 transition-all duration-[1500ms] ease-out flex items-center justify-center ${bootStage === 'on' ? 'opacity-100 scale-100 blur-0' : 'opacity-0 scale-105 blur-md'}`}>
@@ -167,13 +179,17 @@ export default function App() {
             {/* 2. Whitewash Overlay */}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0)_100%)] z-0"></div>
 
-            {/* 3. Foreground Content (Phosphor Morphing Custom Font) */}
+            {/* 3. Foreground Content (Phosphor Morphing Custom Font with inner pixel bloom) */}
             <div className="relative z-10 flex items-center justify-center w-full h-64">
               <h1 className="absolute text-7xl md:text-[9rem] text-black tracking-tight lowercase custom-font morph-text-1 text-center w-full leading-none">
                 djmerkone
+                <span className="absolute inset-0 bloom-layer-1 pointer-events-none" aria-hidden="true">djmerkone</span>
+                <span className="absolute inset-0 bloom-layer-2 pointer-events-none" aria-hidden="true">djmerkone</span>
               </h1>
               <h1 className="absolute text-6xl md:text-[8rem] text-black tracking-tight lowercase custom-font morph-text-2 text-center w-full leading-none">
                 coming soon
+                <span className="absolute inset-0 bloom-layer-1 pointer-events-none" aria-hidden="true">coming soon</span>
+                <span className="absolute inset-0 bloom-layer-2 pointer-events-none" aria-hidden="true">coming soon</span>
               </h1>
             </div>
           </div>
@@ -188,12 +204,12 @@ export default function App() {
             }}
           ></div>
 
-          {/* 4.5 Random RGB Noise Artifacts (Now fully animated and color-burning the background) */}
+          {/* 4.5 Random RGB Noise Artifacts (Toned down contrast to stop bright background flashes) */}
           <div 
-            className="absolute -inset-[10%] w-[120%] h-[120%] z-25 pointer-events-none mix-blend-color-burn animate-artifacts"
+            className="absolute -inset-[10%] w-[120%] h-[120%] z-25 pointer-events-none mix-blend-multiply animate-artifacts"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='4' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              filter: 'contrast(300%) saturate(500%)',
+              filter: 'contrast(150%) saturate(300%)',
             }}
           ></div>
 
@@ -206,9 +222,9 @@ export default function App() {
             }}
           ></div>
 
-          {/* 6. RGB Phosphor Sub-pixel Artifacts (Now with micro-flicker) */}
+          {/* 6. RGB Phosphor Sub-pixel Artifacts (Removed high-freq micro-flicker for eye comfort) */}
           <div 
-            className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply animate-phosphor"
+            className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply opacity-[0.08]"
             style={{
               backgroundImage: 'linear-gradient(90deg, rgba(255,0,0,1) 0%, rgba(255,0,0,1) 33%, rgba(0,255,0,1) 33%, rgba(0,255,0,1) 66%, rgba(0,0,255,1) 66%, rgba(0,0,255,1) 100%)',
               backgroundSize: '3px 100%'
