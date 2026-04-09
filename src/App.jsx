@@ -5,11 +5,12 @@ export default function App() {
     <div className="relative w-full h-screen bg-white overflow-hidden flex items-center justify-center font-sans selection:bg-black selection:text-white">
       
       {/* Background Image Layer */}
-      {/* The image is set to a low opacity (30%) over the white background to create the "ghosted" effect */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30"
-        style={{ backgroundImage: 'url("/bg1.jpg")' }}
-      ></div>
+      {/* Using an img tag is often more reliable for public assets on deployments like Vercel */}
+      <img 
+        src="/bg1.jpg" 
+        alt="djmerkone background"
+        className="absolute inset-0 w-full h-full object-cover object-center opacity-30"
+      />
 
       {/* Whitewash Overlay */}
       {/* A radial gradient that is slightly transparent in the center and pure white at the edges to blend the image out */}
