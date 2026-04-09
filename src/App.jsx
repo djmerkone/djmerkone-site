@@ -1,165 +1,169 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export default function App() {
+  const [bootStage, setBootStage] = useState('off'); // 'off', 'static', 'on'
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const videoRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const noiseNodeRef = useRef(null);
+  const gainNodeRef = useRef(null);
+
+  useEffect(() => {
+    // Sequence: Off -> Burst -> On
+    const t1 = setTimeout(() => setBootStage('static'), 300);
+    const t2 = setTimeout(() => setBootStage('on'), 850);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
+  const handleInteraction = () => {
+    // Attempt to play the background video if it's not playing
+    if (videoRef.current) {
+      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+    }
+
+    if (!audioEnabled && !audioContextRef.current) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioContextRef.current = new AudioContext();
+      const bufferSize = 2 * audioContextRef.current.sampleRate;
+      const noiseBuffer = audioContextRef.current.createBuffer(1, bufferSize, audioContextRef.current.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      noiseNodeRef.current = audioContextRef.current.createBufferSource();
+      noiseNodeRef.current.buffer = noiseBuffer;
+      noiseNodeRef.current.loop = true;
+      gainNodeRef.current = audioContextRef.current.createGain();
+      gainNodeRef.current.gain.setValueAtTime(0.04, audioContextRef.current.currentTime);
+      noiseNodeRef.current.connect(gainNodeRef.current);
+      gainNodeRef.current.connect(audioContextRef.current.destination);
+      noiseNodeRef.current.start();
+      setAudioEnabled(true);
+    } else if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume();
+      setAudioEnabled(true);
+    }
+  };
+
   return (
     <>
       <style>
         {`
-          /* Import classic VCR/OSD pixel font from Google Fonts */
           @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
           .vcr-font {
             font-family: 'VT323', monospace;
-            /* Added a white glow (0 0 12px) to simulate phosphor bloom */
-            text-shadow: 2px 2px 0px rgba(0,0,0,0.9), 
-                         0 0 12px rgba(255, 255, 255, 0.5),
-                         0 0 20px rgba(255, 255, 255, 0.2),
-                        -1px -1px 0px rgba(0,0,0,0.7), 
-                         1px -1px 0px rgba(0,0,0,0.7), 
-                        -1px  1px 0px rgba(0,0,0,0.7), 
-                         1px  1px 0px rgba(0,0,0,0.7);
+            color: #fff;
+            /* Wider, bolder text matching the reference image */
+            font-size: 3.5rem;
+            letter-spacing: 0.15em;
+            transform: scaleX(1.3); /* Horizontally stretching the text for that wide OSD look */
+            text-shadow: 
+              -2px -2px 0 #000,  
+               2px -2px 0 #000,
+              -2px  2px 0 #000,
+               2px  2px 0 #000,
+               0 0 15px rgba(255,255,255,0.7),
+               0 0 30px rgba(255,255,255,0.4);
           }
 
-          /* VCR OSD Text Jitter (mimics tape tracking instability) */
-          @keyframes osd-jitter {
-            0%, 100% { transform: translate(0, 0); }
-            10% { transform: translate(0.5px, 0px); }
-            20% { transform: translate(-0.5px, 0px); }
-            30% { transform: translate(1px, 0px); }
-            40% { transform: translate(0px, 0px); }
-            50% { transform: translate(-0.5px, 0px); }
-            60% { transform: translate(0.5px, 0px); }
-            70% { transform: translate(0px, 0px); }
-            80% { transform: translate(-1px, 0px); }
-            90% { transform: translate(0.5px, 0px); }
+          @media (min-width: 768px) {
+            .vcr-font { font-size: 6rem; }
           }
 
-          /* True TV Static overlay (Snaps positions randomly to mimic real chaotic noise) */
-          @keyframes tv-static {
-            0%   { background-position: 0px 0px; }
-            20%  { background-position: -50px 100px; }
-            40%  { background-position: 80px -40px; }
-            60%  { background-position: -30px 20px; }
-            80%  { background-position: 100px 50px; }
-            100% { background-position: 0px 0px; }
+          /* INTENSE GLOBAL ANALOG BLOOM */
+          .heavy-bloom {
+            position: absolute;
+            inset: 0;
+            z-index: 55;
+            filter: blur(18px) brightness(1.6) contrast(115%);
+            opacity: 0.55;
+            mix-blend-mode: screen;
+            pointer-events: none;
+            background: inherit;
           }
 
-          /* The slow, rolling tracking line artifact */
-          @keyframes crt-roll {
-            0% { transform: translateY(-10vh); }
-            100% { transform: translateY(110vh); }
+          .scanlines-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 56;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.45) 50%);
+            background-size: 100% 6px;
+            pointer-events: none;
           }
 
-          /* Subtle brightness flicker mimicking power fluctuations */
-          @keyframes crt-flicker {
-            0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
-            20% { opacity: 0.95; }
-            22% { opacity: 0.90; }
-            24% { opacity: 0.98; }
-            55% { opacity: 0.93; }
-          }
-
-          /* --- ANIMATION ASSIGNMENTS --- */
-          .animate-roll {
-            animation: crt-roll 7s linear infinite;
+          .crt-vignette-bezel {
+            position: absolute;
+            inset: 0;
+            z-index: 60;
+            background: radial-gradient(circle, transparent 35%, rgba(0,0,0,0.55) 100%);
+            box-shadow: inset 0 0 160px rgba(0,0,0,0.85);
+            pointer-events: none;
           }
           
-          .animate-flicker {
-            animation: crt-flicker 6s ease-in-out infinite;
+          .global-bloom-wrap {
+            filter: blur(0.7px) contrast(110%) brightness(1.1);
           }
 
-          .animate-osd {
-            animation: osd-jitter 0.5s steps(3) infinite;
-          }
-          
-          /* The magic blur/contrast combo that causes overall soft CRT focus. 
-             Increased blur to 1.6px and brightness to 1.15 for a stronger bloomy glow. */
-          .crt-bloom {
-            filter: blur(1.6px) contrast(135%) brightness(1.15) saturate(130%);
+          .noise-video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            /* Boost the video's contrast to make the whites searing */
+            filter: contrast(160%) brightness(1.3) saturate(140%);
           }
         `}
       </style>
 
-      {/* Outer TV Casing - Black background with padding to create the physical bezel */}
-      <div className="relative w-full h-screen bg-[#050505] p-2 sm:p-4 md:p-8 flex items-center justify-center overflow-hidden">
+      {/* Click anywhere to start the noise audio and ensure video playback */}
+      <div 
+        onClick={handleInteraction}
+        className="relative w-full h-screen bg-[#020202] p-2 sm:p-6 md:p-12 flex items-center justify-center overflow-hidden cursor-pointer"
+      >
         
-        {/* The CRT Screen itself */}
-        <div className="relative w-full h-full bg-black rounded-[30px] md:rounded-[50px] overflow-hidden flex items-center justify-center selection:bg-white selection:text-black crt-bloom shadow-[0_0_20px_rgba(0,0,0,1)] ring-4 ring-[#111]">
+        {/* Main TV Frame */}
+        <div className="relative w-full h-full bg-[#111] rounded-[40px] md:rounded-[80px] overflow-hidden flex items-center justify-center global-bloom-wrap shadow-[0_0_150px_rgba(0,0,0,1)] ring-[24px] ring-[#0a0a0a]">
           
-          {/* 1. SMPTE COLOR BARS BACKGROUND */}
-          <div className="absolute inset-0 flex flex-col w-full h-full">
-            <div className="flex w-full h-[67%]">
-              <div className="flex-1 bg-[#c0c0c0]"></div>
-              <div className="flex-1 bg-[#c0c000]"></div>
-              <div className="flex-1 bg-[#00c0c0]"></div>
-              <div className="flex-1 bg-[#00c000]"></div>
-              <div className="flex-1 bg-[#c000c0]"></div>
-              <div className="flex-1 bg-[#c00000]"></div>
-              <div className="flex-1 bg-[#0000c0]"></div>
-            </div>
-            
-            <div className="flex w-full h-[8%]">
-              <div className="flex-1 bg-[#0000c0]"></div>
-              <div className="flex-1 bg-[#000000]"></div>
-              <div className="flex-1 bg-[#c000c0]"></div>
-              <div className="flex-1 bg-[#000000]"></div>
-              <div className="flex-1 bg-[#00c0c0]"></div>
-              <div className="flex-1 bg-[#000000]"></div>
-              <div className="flex-1 bg-[#c0c0c0]"></div>
-            </div>
+          {/* 1. VIDEO BACKGROUND (noise.mp4) */}
+          <video
+            ref={videoRef}
+            src="/noise.mp4"
+            className="noise-video z-0 opacity-85"
+            loop
+            muted
+            autoPlay
+            playsInline
+          />
 
-            <div className="flex w-full h-[25%]">
-              <div className="w-[14.28%] bg-[#00214c]"></div>
-              <div className="w-[14.28%] bg-[#ffffff]"></div>
-              <div className="w-[14.28%] bg-[#32006a]"></div>
-              <div className="flex-1 bg-[#000000]"></div>
-            </div>
-          </div>
-
-          {/* 2. FOREGROUND CONTENT (Classic VCR Text with OSD Jitter) */}
-          <div className="relative z-10 flex flex-col items-center justify-center w-full px-4 text-center vcr-font text-white leading-tight animate-osd">
-            <h1 className="text-5xl md:text-7xl lg:text-8xl tracking-wider uppercase mb-2">
+          {/* 2. MAIN CONTENT (COMING SOON) */}
+          <div className={`relative z-10 flex flex-col items-center justify-center w-full px-4 text-center transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
+            <h1 className="vcr-font select-none">
               COMING SOON
             </h1>
-            <h2 className="text-3xl md:text-5xl lg:text-6xl tracking-widest lowercase">
-              ~djmerkone
-            </h2>
           </div>
 
-          {/* --- CRT EFFECTS LAYERS --- */}
+          {/* 3. BLOOM ENGINE (Luminous glow bleed) */}
+          <div className="heavy-bloom"></div>
+
+          {/* 4. SCANLINES & CRT ARTIFACTS */}
+          <div className="scanlines-overlay"></div>
           
-          {/* 3. Static Scanlines */}
-          <div 
-            className="absolute inset-0 z-30 pointer-events-none mix-blend-multiply opacity-[0.25]"
-            style={{
-              backgroundImage: 'linear-gradient(transparent 50%, rgba(0, 0, 0, 0.5) 50%)',
-              backgroundSize: '100% 4px'
-            }}
-          ></div>
+          {/* Rolling shutter removed as requested */}
 
-          {/* 4. Rolling Tracking Artifact */}
-          <div 
-            className="absolute top-0 left-0 w-full h-[15vh] z-40 pointer-events-none opacity-[0.15] animate-roll mix-blend-color-burn"
-            style={{
-              background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.8) 50%, transparent)'
-            }}
-          ></div>
+          {/* 5. VIGNETTE & TUBE DEPTH */}
+          <div className="crt-vignette-bezel"></div>
 
-          {/* 5. TRUE COLORFUL UHF STATIC */}
-          <div 
-            className="absolute inset-0 w-full h-full z-45 pointer-events-none"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.2 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              backgroundSize: '200px 200px',
-              animation: 'tv-static 0.2s steps(4) infinite',
-              filter: 'contrast(400%) saturate(500%) brightness(1.1)',
-              opacity: 0.30,
-              mixBlendMode: 'normal'
-            }}
-          ></div>
-
-          {/* 6. Curved CRT Glass Tube Inner Shadow */}
-          <div className="absolute inset-0 z-50 pointer-events-none shadow-[inset_0_0_100px_rgba(0,0,0,0.8),_inset_0_0_30px_rgba(0,0,0,0.6)] animate-flicker"></div>
+          {/* --- TV POWER ON SEQUENCE --- */}
+          <div className={`absolute inset-0 z-[100] bg-black pointer-events-none transition-opacity duration-700 ${bootStage === 'off' ? 'opacity-100' : 'opacity-0'}`}></div>
+          <div className={`absolute inset-0 z-[101] pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
+             {/* Power-on static flash using a brighter version of the video */}
+             <video src="/noise.mp4" className="noise-video opacity-100 contrast-[300%] brightness-150" loop muted autoPlay playsInline />
+          </div>
 
         </div>
       </div>
