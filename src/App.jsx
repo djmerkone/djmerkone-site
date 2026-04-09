@@ -163,16 +163,7 @@ export default function App() {
             }}
           ></div>
 
-          {/* 5. RGB Phosphor Sub-pixel Artifacts */}
-          <div 
-            className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply opacity-[0.06]"
-            style={{
-              backgroundImage: 'linear-gradient(90deg, rgba(255,0,0,1) 0%, rgba(255,0,0,1) 33%, rgba(0,255,0,1) 33%, rgba(0,255,0,1) 66%, rgba(0,0,255,1) 66%, rgba(0,0,255,1) 100%)',
-              backgroundSize: '3px 100%'
-            }}
-          ></div>
-
-          {/* 6. Rolling Tracking Artifact */}
+          {/* 5. Rolling Tracking Artifact */}
           <div 
             className="absolute top-0 left-0 w-full h-[15vh] z-40 pointer-events-none opacity-10 animate-roll mix-blend-color-burn"
             style={{
@@ -180,15 +171,20 @@ export default function App() {
             }}
           ></div>
 
-          {/* 7. NEW: MULTI-COLORED PERSISTENT RGB STATIC (Covers the whole site at 10% opacity) */}
+          {/* 6. TRUE COLORFUL UHF STATIC (Persistent over entire site, matches uploaded GIF) */}
           <div 
-            className="absolute -inset-[10%] w-[120%] h-[120%] z-45 pointer-events-none opacity-[0.10]"
+            className="absolute -inset-[10%] w-[120%] h-[120%] z-45 pointer-events-none"
             style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6 0.2' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              /* baseFrequency='0.4 0.9' stretches the noise to create horizontal colored VHS dashes */
+              /* type='turbulence' generates raw, unfiltered RGB color channels */
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.4 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
               backgroundSize: '150px 150px',
               animation: 'tv-static 0.2s steps(4) infinite',
-              /* This specific filter violently forces the SVG noise into high-contrast BLK/R/G/B/WHT pixels */
-              filter: 'contrast(400%) saturate(400%) brightness(0.9)'
+              /* Violently forces the SVG noise into high-contrast BLK/R/G/B/WHT pixels */
+              filter: 'contrast(300%) saturate(400%)',
+              /* 12% opacity combined with hard-light ensures it overlays text and background vividly */
+              opacity: 0.12,
+              mixBlendMode: 'hard-light'
             }}
           ></div>
 
@@ -197,10 +193,11 @@ export default function App() {
           {/* Intense Static Burst (During boot) */}
           <div className={`absolute inset-0 z-[48] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
              <div 
-              className="absolute inset-0 opacity-80 mix-blend-difference"
+              className="absolute inset-0 opacity-100 mix-blend-normal"
               style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.4 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
                 backgroundSize: '150px 150px',
+                filter: 'contrast(300%) saturate(400%)',
                 animation: 'tv-static 0.2s steps(4) infinite'
               }}
             ></div>
@@ -209,7 +206,7 @@ export default function App() {
           {/* Black Screen (TV Off) */}
           <div className={`absolute inset-0 z-[49] bg-black pointer-events-none transition-opacity duration-150 ${bootStage === 'off' ? 'opacity-100' : 'opacity-0'}`}></div>
 
-          {/* 8. Curved CRT Glass Tube Inner Shadow */}
+          {/* 7. Curved CRT Glass Tube Inner Shadow */}
           <div className="absolute inset-0 z-50 pointer-events-none shadow-[inset_0_0_100px_rgba(0,0,0,0.8),_inset_0_0_30px_rgba(0,0,0,0.6)]"></div>
 
         </div>
