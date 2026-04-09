@@ -41,41 +41,17 @@ export default function App() {
             100% { background-position: 0px 0px; }
           }
 
-          /* Highly erratic movement specifically for the RGB noise artifacts */
-          @keyframes rgb-noise-dance {
-            0%, 100% { transform: translate(0, 0); }
-            10% { transform: translate(-2px, -2px); }
-            20% { transform: translate(2px, 2px); }
-            30% { transform: translate(-1px, 3px); }
-            40% { transform: translate(3px, -1px); }
-            50% { transform: translate(-3px, 1px); }
-            60% { transform: translate(1px, 3px); }
-            70% { transform: translate(-2px, -2px); }
-            80% { transform: translate(2px, 1px); }
-            90% { transform: translate(-1px, -3px); }
-          }
-
-          /* Random opacity flicker for the RGB dead pixels */
-          @keyframes artifacts-flicker {
-            0%, 100% { opacity: 0.05; }
-            10% { opacity: 0.10; }
-            20% { opacity: 0.03; }
-            50% { opacity: 0.12; }
-            55% { opacity: 0.06; }
-            90% { opacity: 0.08; }
-          }
-
-          /* Pixelated, glitchy edge bloom (Rapid, tight snapping movements) */
-          @keyframes pixel-buzz-1 {
-            0%, 100% { transform: translate(1px, -1px); opacity: 0.9; }
-            33% { transform: translate(-1px, 1px); opacity: 0.5; }
-            66% { transform: translate(0px, -1px); opacity: 1; }
+          /* Smooth, gentle breathing for the text edges */
+          @keyframes smooth-bloom-1 {
+            0% { transform: translate(0px, 0px); opacity: 0.3; }
+            50% { transform: translate(1px, 1px); opacity: 0.6; }
+            100% { transform: translate(0px, 0px); opacity: 0.3; }
           }
           
-          @keyframes pixel-buzz-2 {
-            0%, 100% { transform: translate(-1px, 1px); opacity: 0.6; }
-            33% { transform: translate(1px, 0px); opacity: 1; }
-            66% { transform: translate(-1px, -1px); opacity: 0.4; }
+          @keyframes smooth-bloom-2 {
+            0% { transform: translate(0px, 0px); opacity: 0.5; }
+            50% { transform: translate(-1px, -1px); opacity: 0.2; }
+            100% { transform: translate(0px, 0px); opacity: 0.5; }
           }
 
           /* The slow, rolling tracking line artifact */
@@ -108,10 +84,6 @@ export default function App() {
 
           /* --- ANIMATION ASSIGNMENTS --- */
 
-          .animate-artifacts {
-            animation: rgb-noise-dance 0.4s linear infinite, artifacts-flicker 4s ease-in-out infinite;
-          }
-
           .animate-roll {
             animation: crt-roll 7s linear infinite;
           }
@@ -124,24 +96,19 @@ export default function App() {
             animation: morph-2 12s ease-in-out infinite;
           }
 
-          /* Glitchy edge outlines */
+          /* Smooth, gentle edge outlines */
           .bloom-layer-1 {
-            animation: pixel-buzz-1 0.15s steps(2) infinite;
+            animation: smooth-bloom-1 4s ease-in-out infinite;
             color: transparent; 
-            -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.9); 
+            -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.6); 
             mix-blend-mode: screen;
           }
           
           .bloom-layer-2 {
-            animation: pixel-buzz-2 0.2s steps(3) infinite;
+            animation: smooth-bloom-2 3s ease-in-out infinite;
             color: transparent; 
-            -webkit-text-stroke: 1px rgba(220, 220, 220, 0.7); 
+            -webkit-text-stroke: 1px rgba(200, 200, 200, 0.4); 
             mix-blend-mode: screen;
-          }
-          
-          /* Subtle brightness flicker mimicking power fluctuations (Smoothed out) */
-          .animate-flicker {
-            animation: crt-flicker 6s ease-in-out infinite;
           }
           
           /* The magic blur/contrast combo that causes overall soft focus */
@@ -170,11 +137,10 @@ export default function App() {
             {/* 2. Whitewash Overlay */}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0)_100%)] z-0"></div>
 
-            {/* 3. Foreground Content (Phosphor Morphing Custom Font with inner outline bloom) */}
+            {/* 3. Foreground Content (Phosphor Morphing Custom Font with gentle inner outline bloom) */}
             <div className="relative z-10 flex items-center justify-center w-full h-64">
               <h1 className="absolute text-7xl md:text-[9rem] text-black tracking-tight lowercase custom-font morph-text-1 text-center w-full leading-none">
                 djmerkone
-                {/* Notice the filter: blur is gone, creating sharp, pixelated-feeling static edges */}
                 <span className="absolute inset-0 bloom-layer-1 pointer-events-none" aria-hidden="true">djmerkone</span>
                 <span className="absolute inset-0 bloom-layer-2 pointer-events-none" aria-hidden="true">djmerkone</span>
               </h1>
@@ -188,54 +154,47 @@ export default function App() {
 
           {/* --- CRT EFFECTS LAYERS --- */}
           
-          {/* 4. TRUE FULL-SCREEN TV STATIC (Tiled background rapidly shifting positions) */}
+          {/* 4. Static Scanlines */}
           <div 
-            className="absolute -inset-[10%] w-[120%] h-[120%] z-20 pointer-events-none opacity-[0.14] mix-blend-multiply"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              backgroundSize: '200px 200px', // Tiles the noise so it remains high-fidelity
-              animation: 'tv-static 0.3s steps(5) infinite' // Snaps positions like true TV snow
-            }}
-          ></div>
-
-          {/* 4.5 Random RGB Noise Artifacts */}
-          <div 
-            className="absolute -inset-[10%] w-[120%] h-[120%] z-25 pointer-events-none mix-blend-multiply animate-artifacts"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='4' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              filter: 'contrast(150%) saturate(300%)',
-            }}
-          ></div>
-
-          {/* 5. Static Scanlines */}
-          <div 
-            className="absolute inset-0 z-30 pointer-events-none mix-blend-multiply opacity-25"
+            className="absolute inset-0 z-30 pointer-events-none mix-blend-multiply opacity-[0.15]"
             style={{
               backgroundImage: 'linear-gradient(transparent 50%, rgba(0, 0, 0, 0.4) 50%)',
               backgroundSize: '100% 4px'
             }}
           ></div>
 
-          {/* 6. RGB Phosphor Sub-pixel Artifacts */}
+          {/* 5. RGB Phosphor Sub-pixel Artifacts */}
           <div 
-            className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply opacity-[0.08]"
+            className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply opacity-[0.06]"
             style={{
               backgroundImage: 'linear-gradient(90deg, rgba(255,0,0,1) 0%, rgba(255,0,0,1) 33%, rgba(0,255,0,1) 33%, rgba(0,255,0,1) 66%, rgba(0,0,255,1) 66%, rgba(0,0,255,1) 100%)',
               backgroundSize: '3px 100%'
             }}
           ></div>
 
-          {/* 7. Rolling Tracking Artifact */}
+          {/* 6. Rolling Tracking Artifact */}
           <div 
-            className="absolute top-0 left-0 w-full h-[15vh] z-40 pointer-events-none opacity-15 animate-roll mix-blend-color-burn"
+            className="absolute top-0 left-0 w-full h-[15vh] z-40 pointer-events-none opacity-10 animate-roll mix-blend-color-burn"
             style={{
               background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.8) 50%, transparent)'
             }}
           ></div>
 
+          {/* 7. NEW: MULTI-COLORED PERSISTENT RGB STATIC (Covers the whole site at 10% opacity) */}
+          <div 
+            className="absolute -inset-[10%] w-[120%] h-[120%] z-45 pointer-events-none opacity-[0.10]"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6 0.2' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              backgroundSize: '150px 150px',
+              animation: 'tv-static 0.2s steps(4) infinite',
+              /* This specific filter violently forces the SVG noise into high-contrast BLK/R/G/B/WHT pixels */
+              filter: 'contrast(400%) saturate(400%) brightness(0.9)'
+            }}
+          ></div>
+
           {/* --- BOOT SEQUENCE OVERLAYS --- */}
           
-          {/* Intense Static Burst (Reuses the true TV static for continuity) */}
+          {/* Intense Static Burst (During boot) */}
           <div className={`absolute inset-0 z-[48] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
              <div 
               className="absolute inset-0 opacity-80 mix-blend-difference"
@@ -251,7 +210,7 @@ export default function App() {
           <div className={`absolute inset-0 z-[49] bg-black pointer-events-none transition-opacity duration-150 ${bootStage === 'off' ? 'opacity-100' : 'opacity-0'}`}></div>
 
           {/* 8. Curved CRT Glass Tube Inner Shadow */}
-          <div className="absolute inset-0 z-50 pointer-events-none shadow-[inset_0_0_100px_rgba(0,0,0,0.8),_inset_0_0_30px_rgba(0,0,0,0.6)] animate-flicker"></div>
+          <div className="absolute inset-0 z-50 pointer-events-none shadow-[inset_0_0_100px_rgba(0,0,0,0.8),_inset_0_0_30px_rgba(0,0,0,0.6)]"></div>
 
         </div>
       </div>
