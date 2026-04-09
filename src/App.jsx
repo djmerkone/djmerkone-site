@@ -45,6 +45,36 @@ export default function App() {
             90% { transform: translate(-1%, -2%); }
           }
 
+          /* Highly erratic movement specifically for the RGB noise artifacts */
+          @keyframes rgb-noise-dance {
+            0%, 100% { transform: translate(0, 0); }
+            10% { transform: translate(-2%, -2%); }
+            20% { transform: translate(2%, 2%); }
+            30% { transform: translate(-1%, 3%); }
+            40% { transform: translate(3%, -1%); }
+            50% { transform: translate(-3%, 1%); }
+            60% { transform: translate(1%, 3%); }
+            70% { transform: translate(-2%, -2%); }
+            80% { transform: translate(2%, 1%); }
+            90% { transform: translate(-1%, -3%); }
+          }
+
+          /* Random opacity flicker for the RGB dead pixels */
+          @keyframes artifacts-flicker {
+            0%, 100% { opacity: 0.05; }
+            10% { opacity: 0.20; }
+            20% { opacity: 0.02; }
+            50% { opacity: 0.25; }
+            55% { opacity: 0.08; }
+            90% { opacity: 0.15; }
+          }
+
+          /* Subtle micro-flicker for the static RGB subpixel phosphor mask */
+          @keyframes phosphor-flicker {
+            0%, 100% { opacity: 0.12; }
+            50% { opacity: 0.06; }
+          }
+
           /* Subtle brightness flicker mimicking power fluctuations */
           @keyframes crt-flicker {
             0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
@@ -60,24 +90,39 @@ export default function App() {
             100% { transform: translateY(110vh); }
           }
 
-          /* Phosphor Ghosting Morph - Text 1 */
+          /* Realistic Phosphor Ghosting Morph - Text 1 (djmerkone) */
+          /* Incorporates deflection beam separation (red/cyan) and phosphor decay (green/purple) */
           @keyframes morph-1 {
-            0%, 38%   { opacity: 1; filter: blur(0px); transform: scale(1); }
-            43%, 57%  { opacity: 0; filter: blur(12px); transform: scale(1.05); }
-            62%, 88%  { opacity: 0; filter: blur(12px); transform: scale(0.95); }
-            93%, 100% { opacity: 1; filter: blur(0px); transform: scale(1); }
+            0%, 42% { opacity: 1; filter: blur(0px); transform: scale(1) skewX(0deg); color: black; text-shadow: none; }
+            43% { opacity: 0.9; filter: blur(2px); transform: scale(1.02) skewX(-12deg); color: #222; text-shadow: 8px 0 2px rgba(0,255,255,0.9), -8px 0 2px rgba(255,0,0,0.9); }
+            45% { opacity: 0.6; filter: blur(6px); transform: scale(1.05) skewX(5deg); color: #5cff63; text-shadow: 0 0 20px rgba(92,255,99,1); }
+            48%, 92% { opacity: 0; filter: blur(12px); transform: scale(1.05) skewX(0deg); color: transparent; text-shadow: none; }
+            94% { opacity: 0.6; filter: blur(6px); transform: scale(0.95) skewX(-5deg); color: #e040fb; text-shadow: 0 0 20px rgba(224,64,251,1); }
+            96% { opacity: 0.9; filter: blur(2px); transform: scale(0.98) skewX(12deg); color: #222; text-shadow: 8px 0 2px rgba(0,255,255,0.9), -8px 0 2px rgba(255,0,0,0.9); }
+            98%, 100% { opacity: 1; filter: blur(0px); transform: scale(1) skewX(0deg); color: black; text-shadow: none; }
           }
 
-          /* Phosphor Ghosting Morph - Text 2 */
+          /* Realistic Phosphor Ghosting Morph - Text 2 (coming soon) */
           @keyframes morph-2 {
-            0%, 38%   { opacity: 0; filter: blur(12px); transform: scale(0.95); }
-            43%, 57%  { opacity: 1; filter: blur(0px); transform: scale(1); }
-            62%, 88%  { opacity: 1; filter: blur(0px); transform: scale(1); }
-            93%, 100% { opacity: 0; filter: blur(12px); transform: scale(1.05); }
+            0%, 42% { opacity: 0; filter: blur(12px); transform: scale(1.05) skewX(0deg); color: transparent; text-shadow: none; }
+            44% { opacity: 0.6; filter: blur(6px); transform: scale(0.95) skewX(-5deg); color: #e040fb; text-shadow: 0 0 20px rgba(224,64,251,1); }
+            46% { opacity: 0.9; filter: blur(2px); transform: scale(0.98) skewX(12deg); color: #222; text-shadow: 8px 0 2px rgba(0,255,255,0.9), -8px 0 2px rgba(255,0,0,0.9); }
+            48%, 92% { opacity: 1; filter: blur(0px); transform: scale(1) skewX(0deg); color: black; text-shadow: none; }
+            93% { opacity: 0.9; filter: blur(2px); transform: scale(1.02) skewX(-12deg); color: #222; text-shadow: 8px 0 2px rgba(0,255,255,0.9), -8px 0 2px rgba(255,0,0,0.9); }
+            95% { opacity: 0.6; filter: blur(6px); transform: scale(1.05) skewX(5deg); color: #5cff63; text-shadow: 0 0 20px rgba(92,255,99,1); }
+            98%, 100% { opacity: 0; filter: blur(12px); transform: scale(1.05) skewX(0deg); color: transparent; text-shadow: none; }
           }
 
           .animate-grain {
             animation: crt-grain 0.3s steps(10) infinite;
+          }
+
+          .animate-artifacts {
+            animation: rgb-noise-dance 0.3s steps(10) infinite, artifacts-flicker 3s infinite steps(2);
+          }
+
+          .animate-phosphor {
+            animation: phosphor-flicker 0.15s infinite;
           }
           
           .animate-flicker {
@@ -89,11 +134,11 @@ export default function App() {
           }
 
           .morph-text-1 {
-            animation: morph-1 10s infinite ease-in-out;
+            animation: morph-1 12s infinite linear;
           }
 
           .morph-text-2 {
-            animation: morph-2 10s infinite ease-in-out;
+            animation: morph-2 12s infinite linear;
           }
           
           /* The magic blur/contrast combo that causes Phosphor Bloom */
@@ -143,12 +188,12 @@ export default function App() {
             }}
           ></div>
 
-          {/* 4.5 Random RGB Noise Artifacts */}
+          {/* 4.5 Random RGB Noise Artifacts (Now fully animated and color-burning the background) */}
           <div 
-            className="absolute -inset-[10%] w-[120%] h-[120%] z-25 pointer-events-none mix-blend-multiply animate-artifacts"
+            className="absolute -inset-[10%] w-[120%] h-[120%] z-25 pointer-events-none mix-blend-color-burn animate-artifacts"
             style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              filter: 'contrast(400%) saturate(500%)',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='4' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              filter: 'contrast(300%) saturate(500%)',
             }}
           ></div>
 
@@ -161,9 +206,9 @@ export default function App() {
             }}
           ></div>
 
-          {/* 6. RGB Phosphor Sub-pixel Artifacts */}
+          {/* 6. RGB Phosphor Sub-pixel Artifacts (Now with micro-flicker) */}
           <div 
-            className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply opacity-[0.12]"
+            className="absolute inset-0 z-35 pointer-events-none mix-blend-multiply animate-phosphor"
             style={{
               backgroundImage: 'linear-gradient(90deg, rgba(255,0,0,1) 0%, rgba(255,0,0,1) 33%, rgba(0,255,0,1) 33%, rgba(0,255,0,1) 66%, rgba(0,0,255,1) 66%, rgba(0,0,255,1) 100%)',
               backgroundSize: '3px 100%'
