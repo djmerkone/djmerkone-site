@@ -13,8 +13,8 @@ export default function App() {
       />
 
       {/* Whitewash Overlay */}
-      {/* A radial gradient that is slightly transparent in the center and pure white at the edges to blend the image out */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0.9)_100%)] pointer-events-none z-0"></div>
+      {/* Inverted radial gradient: highly opaque white in the center for legibility, fading out to transparent at the edges */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.5)_40%,rgba(255,255,255,0)_100%)] pointer-events-none z-0"></div>
 
       {/* Foreground Content */}
       <div className="relative z-10 flex flex-col items-center justify-center p-8 text-center">
