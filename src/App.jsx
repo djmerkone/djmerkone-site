@@ -18,6 +18,19 @@ export default function App() {
     <>
       <style>
         {`
+          /* Load the custom TTF font directly from the public folder */
+          @font-face {
+            font-family: 'ButterPress';
+            src: url('/ButterPress-ywnrq.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+          }
+
+          .custom-font {
+            font-family: 'ButterPress', sans-serif;
+          }
+
           /* Fine, chaotic static grain animation */
           @keyframes crt-grain {
             0%, 100% { transform: translate(0, 0); }
@@ -47,6 +60,22 @@ export default function App() {
             100% { transform: translateY(110vh); }
           }
 
+          /* Phosphor Ghosting Morph - Text 1 */
+          @keyframes morph-1 {
+            0%, 38%   { opacity: 1; filter: blur(0px); transform: scale(1); }
+            43%, 57%  { opacity: 0; filter: blur(12px); transform: scale(1.05); }
+            62%, 88%  { opacity: 0; filter: blur(12px); transform: scale(0.95); }
+            93%, 100% { opacity: 1; filter: blur(0px); transform: scale(1); }
+          }
+
+          /* Phosphor Ghosting Morph - Text 2 */
+          @keyframes morph-2 {
+            0%, 38%   { opacity: 0; filter: blur(12px); transform: scale(0.95); }
+            43%, 57%  { opacity: 1; filter: blur(0px); transform: scale(1); }
+            62%, 88%  { opacity: 1; filter: blur(0px); transform: scale(1); }
+            93%, 100% { opacity: 0; filter: blur(12px); transform: scale(1.05); }
+          }
+
           .animate-grain {
             animation: crt-grain 0.3s steps(10) infinite;
           }
@@ -57,6 +86,14 @@ export default function App() {
 
           .animate-roll {
             animation: crt-roll 7s linear infinite;
+          }
+
+          .morph-text-1 {
+            animation: morph-1 10s infinite ease-in-out;
+          }
+
+          .morph-text-2 {
+            animation: morph-2 10s infinite ease-in-out;
           }
           
           /* The magic blur/contrast combo that causes Phosphor Bloom */
@@ -70,7 +107,7 @@ export default function App() {
       <div className="relative w-full h-screen bg-[#050505] p-2 sm:p-4 md:p-8 flex items-center justify-center overflow-hidden">
         
         {/* The CRT Screen itself - Rounded corners, clipped overflow, and bloom applied here */}
-        <div className="relative w-full h-full bg-white rounded-[30px] md:rounded-[50px] overflow-hidden flex items-center justify-center font-sans selection:bg-black selection:text-white animate-flicker crt-bloom shadow-[0_0_20px_rgba(0,0,0,1)] ring-4 ring-[#111]">
+        <div className="relative w-full h-full bg-white rounded-[30px] md:rounded-[50px] overflow-hidden flex items-center justify-center selection:bg-black selection:text-white animate-flicker crt-bloom shadow-[0_0_20px_rgba(0,0,0,1)] ring-4 ring-[#111]">
           
           {/* Main Content Wrapper - Animates in after the boot sequence */}
           <div className={`absolute inset-0 transition-all duration-[1500ms] ease-out flex items-center justify-center ${bootStage === 'on' ? 'opacity-100 scale-100 blur-0' : 'opacity-0 scale-105 blur-md'}`}>
@@ -79,23 +116,20 @@ export default function App() {
             <img 
               src="/bg1.png" 
               alt="djmerkone background"
-              className="absolute inset-0 w-full h-full object-cover object-center opacity-40"
+              className="absolute inset-0 w-full h-full object-cover object-center opacity-20"
             />
 
             {/* 2. Whitewash Overlay */}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0)_100%)] z-0"></div>
 
-            {/* 3. Foreground Content (Removed Chromatic Aberration) */}
-            <div className="relative z-10 flex flex-col items-center justify-center p-8 text-center">
-              <h1 className="text-5xl md:text-8xl font-black text-black tracking-tighter mb-4 lowercase">
+            {/* 3. Foreground Content (Phosphor Morphing Custom Font) */}
+            <div className="relative z-10 flex items-center justify-center w-full h-64">
+              <h1 className="absolute text-7xl md:text-[9rem] text-black tracking-tight lowercase custom-font morph-text-1 text-center w-full leading-none">
                 djmerkone
               </h1>
-              
-              <div className="h-[2px] w-full max-w-[200px] bg-black/40 mb-6"></div>
-              
-              <h2 className="text-lg md:text-2xl font-light text-black tracking-[0.4em] uppercase">
+              <h1 className="absolute text-6xl md:text-[8rem] text-black tracking-tight lowercase custom-font morph-text-2 text-center w-full leading-none">
                 coming soon
-              </h2>
+              </h1>
             </div>
           </div>
 
@@ -106,6 +140,15 @@ export default function App() {
             className="absolute -inset-[10%] w-[120%] h-[120%] z-20 pointer-events-none opacity-[0.08] mix-blend-multiply animate-grain"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+            }}
+          ></div>
+
+          {/* 4.5 Random RGB Noise Artifacts */}
+          <div 
+            className="absolute -inset-[10%] w-[120%] h-[120%] z-25 pointer-events-none mix-blend-multiply animate-artifacts"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              filter: 'contrast(400%) saturate(500%)',
             }}
           ></div>
 
@@ -151,7 +194,6 @@ export default function App() {
           <div className={`absolute inset-0 z-[49] bg-black pointer-events-none transition-opacity duration-150 ${bootStage === 'off' ? 'opacity-100' : 'opacity-0'}`}></div>
 
           {/* 8. Curved CRT Glass Tube Inner Shadow */}
-          {/* Sits above the boot sequence layers so the glass reflection remains visible even when TV is "off" */}
           <div className="absolute inset-0 z-50 pointer-events-none shadow-[inset_0_0_100px_rgba(0,0,0,0.8),_inset_0_0_30px_rgba(0,0,0,0.6)]"></div>
 
         </div>
