@@ -7,7 +7,7 @@ export default function App() {
       {/* Background Image Layer */}
       {/* Using an img tag is often more reliable for public assets on deployments like Vercel */}
       <img 
-        src="/bg1.jpg" 
+        src="/bg1.png" 
         alt="djmerkone background"
         className="absolute inset-0 w-full h-full object-cover object-center opacity-30"
       />
