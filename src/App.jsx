@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
-  // Stages: 'off', 'tv-on-flash', 'booting', 'on', 'nosignal', 'tv-off-anim', 'permanently-off'
+  // Stages: 'off', 'tv-on-flash', 'booting', 'on', 'nosignal', 'tv-off-anim', 'permanently-off', 'final-tv-on-flash', 'final-screen'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
   
   const videoRef = useRef(null);
@@ -165,7 +165,7 @@ export default function App() {
   // Video source handler
   useEffect(() => {
     if (videoRef.current) {
-      if (bootStage === 'nosignal' || bootStage === 'off') {
+      if (bootStage === 'nosignal' || bootStage === 'off' || bootStage === 'final-tv-on-flash') {
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log("Video play blocked:", e));
       } else if (bootStage === 'permanently-off') {
@@ -208,6 +208,55 @@ export default function App() {
     return () => {
       clearTimeout(timeout1);
       clearTimeout(timeout2);
+    };
+  }, [bootStage]);
+
+  // Handle the 3-second delay after permanently off, then turn back on for the final screen
+  useEffect(() => {
+    let t1, t2;
+    if (bootStage === 'permanently-off') {
+      t1 = setTimeout(() => {
+        setBootStage('final-tv-on-flash');
+        
+        if (audioContextRef.current) {
+          const actx = audioContextRef.current;
+          const t0 = actx.currentTime;
+          
+          // Power On Audio: Heavy Thump
+          const thumpOsc = actx.createOscillator();
+          thumpOsc.type = 'square';
+          thumpOsc.frequency.setValueAtTime(150, t0);
+          thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+          const thumpGain = actx.createGain();
+          thumpGain.gain.setValueAtTime(0.7, t0);
+          thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+          thumpOsc.connect(thumpGain).connect(actx.destination);
+          thumpOsc.start(t0);
+          thumpOsc.stop(t0 + 0.15);
+          activeNodesRef.current.push(thumpOsc);
+
+          // Add a low-volume ambient hiss so it's not dead silent
+          const noiseBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
+          const output = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+          const noiseSrc = actx.createBufferSource();
+          noiseSrc.buffer = noiseBuffer;
+          noiseSrc.loop = true;
+          const noiseGain = actx.createGain();
+          noiseGain.gain.setValueAtTime(0.015, t0);
+          noiseSrc.connect(noiseGain).connect(actx.destination);
+          noiseSrc.start(t0);
+          activeNodesRef.current.push(noiseSrc);
+        }
+
+        t2 = setTimeout(() => {
+          setBootStage('final-screen');
+        }, 150);
+      }, 3000); // Wait 3 seconds
+    }
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, [bootStage]);
 
@@ -349,7 +398,7 @@ export default function App() {
         )}
 
         {/* --- INTENSE WHITE FLASHES (Power On) --- */}
-        <div className={`absolute inset-0 z-[200] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'tv-on-flash' ? 'opacity-100' : 'opacity-0'}`}></div>
+        <div className={`absolute inset-0 z-[200] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'tv-on-flash' || bootStage === 'final-tv-on-flash' ? 'opacity-100' : 'opacity-0'}`}></div>
 
         {/* Main TV Frame */}
         {/* We use #151515 to simulate the dark grey color of an powered-down glass CRT screen */}
@@ -361,7 +410,10 @@ export default function App() {
             {/* 1. VIDEO BACKGROUND */}
             <video
               ref={videoRef}
-              src={bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? "/static.mp4" : "/noise.mp4"}
+              src={
+                bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? "/last.mp4" :
+                (bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? "/static.mp4" : "/noise.mp4")
+              }
               className={`noise-video z-0 ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
               loop
               muted
@@ -387,6 +439,22 @@ export default function App() {
                 >
                   NO SIGNAL
                 </a>
+              </div>
+            ) : bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? (
+              <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
+                <div className="absolute w-full max-w-4xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-4 md:gap-8">
+                  <p className="text-5xl md:text-8xl mb-2">djmerkone</p>
+                  <p className="text-3xl md:text-5xl opacity-90 leading-relaxed">
+                    once your girlfriend's favorite dj,<br/>
+                    now your wife's favorite sound...
+                  </p>
+                  <p className="text-4xl md:text-6xl mt-8">website coming soon</p>
+                </div>
+                
+                {/* Tiny CRT Footer Text */}
+                <div className="absolute bottom-6 md:bottom-10 w-full text-center vcr-font text-sm md:text-lg opacity-70 px-4">
+                  click <a href="#" onClick={(e) => { e.preventDefault(); window.location.reload(); }} className="hover:text-[#0f0] transition-colors pointer-events-auto">reload</a> to watch again, or go to <a href="https://djmerkone.com" className="hover:text-[#0f0] transition-colors pointer-events-auto">djmerkone.com</a> for more info
+                </div>
               </div>
             ) : (
               <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-700 ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
