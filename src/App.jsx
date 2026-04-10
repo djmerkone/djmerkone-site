@@ -1241,7 +1241,11 @@ export default function App() {
         videoRef.current.src = "/game2.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
-      } else if (secretGameState === 'galaga' || secretGameState === 'menu') {
+      } else if (secretGameState === 'menu') {
+        videoRef.current.src = "/menu.mp4";
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log(e));
+      } else if (secretGameState === 'galaga') {
         videoRef.current.src = "/game.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
