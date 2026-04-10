@@ -1,15 +1,129 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
+// --- SECRET PONG GAME COMPONENT ---
+const PongGame = () => {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    // Game Entities
+    let p1 = { x: 40, y: 160, w: 20, h: 100, score: 0 };
+    let p2 = { x: 740, y: 160, w: 20, h: 100, score: 0 };
+    let ball = { x: 400, y: 250, r: 12, vx: 7, vy: 7 };
+
+    const keys = {};
+    const handleKeyDown = e => { keys[e.key] = true; };
+    const handleKeyUp = e => { keys[e.key] = false; };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    const draw = () => {
+      // Clear background to let video bleed through
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Net
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      for (let i = 0; i < canvas.height; i += 40) {
+        ctx.fillRect(canvas.width / 2 - 4, i, 8, 20);
+      }
+
+      // Draw Paddles & Ball
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fillRect(p1.x, p1.y, p1.w, p1.h);
+      ctx.fillRect(p2.x, p2.y, p2.w, p2.h);
+      ctx.fillRect(ball.x - ball.r, ball.y - ball.r, ball.r * 2, ball.r * 2);
+
+      // Draw Scores
+      ctx.font = '80px "VT323", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(p1.score, canvas.width / 4, 100);
+      ctx.fillText(p2.score, (canvas.width / 4) * 3, 100);
+    };
+
+    const resetBall = () => {
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      ball.vx = (Math.random() > 0.5 ? 7 : -7);
+      ball.vy = (Math.random() > 0.5 ? 7 : -7);
+    };
+
+    const update = () => {
+      // Player 1 Movement (Arrow Keys or W/S)
+      if (keys['ArrowUp'] || keys['w'] || keys['W']) p1.y -= 8;
+      if (keys['ArrowDown'] || keys['s'] || keys['S']) p1.y += 8;
+      p1.y = Math.max(0, Math.min(canvas.height - p1.h, p1.y));
+
+      // Simple AI Movement
+      const aiCenter = p2.y + p2.h / 2;
+      if (aiCenter < ball.y - 15) p2.y += 5.5;
+      else if (aiCenter > ball.y + 15) p2.y -= 5.5;
+      p2.y = Math.max(0, Math.min(canvas.height - p2.h, p2.y));
+
+      // Ball Physics
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Wall Bounce (Top & Bottom)
+      if (ball.y - ball.r <= 0 || ball.y + ball.r >= canvas.height) {
+        ball.vy *= -1;
+      }
+
+      // Paddle Collision
+      if (ball.x - ball.r <= p1.x + p1.w && ball.y >= p1.y && ball.y <= p1.y + p1.h && ball.vx < 0) {
+        ball.vx *= -1.05; // Speed up slightly on hit
+      }
+      if (ball.x + ball.r >= p2.x && ball.y >= p2.y && ball.y <= p2.y + p2.h && ball.vx > 0) {
+        ball.vx *= -1.05;
+      }
+
+      // Scoring
+      if (ball.x < 0) { p2.score++; resetBall(); } 
+      else if (ball.x > canvas.width) { p1.score++; resetBall(); }
+    };
+
+    const loop = () => {
+      update();
+      draw();
+      animationFrameId = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto">
+      <canvas 
+        ref={canvasRef} 
+        width={800} 
+        height={500} 
+        className="w-full max-w-4xl border-[6px] border-white/50 shadow-[0_0_50px_rgba(255,255,255,0.4)] bg-transparent"
+      />
+      <p className="vcr-font mt-6 text-2xl opacity-80 blink-text">USE ARROW KEYS TO PLAY</p>
+    </div>
+  );
+};
+
+
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
   // Stages: 'off', 'tv-on-flash', 'booting', 'on', 'nosignal', 'tv-off-anim', 'permanently-off', 'final-tv-on-flash', 'final-screen'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
+  const [isPong, setIsPong] = useState(false);
   
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
   const utteranceRef = useRef(null); 
   const timeoutsRef = useRef([]); 
-  const activeNodesRef = useRef([]); // Keeps track of audio nodes for clean muting
+  const activeNodesRef = useRef([]); 
+  const secretBufferRef = useRef(''); // Tracks keystrokes for secrets
 
   // Clean up audio nodes securely
   const cleanupAudio = useCallback(() => {
@@ -20,14 +134,13 @@ export default function App() {
     activeNodesRef.current = [];
   }, []);
 
-  // Generates the looping radio telemetry (hum, crackle, data chirps)
+  // Generates the looping radio telemetry
   const createTelemetryBuffer = useCallback((actx) => {
     const length = actx.sampleRate * 4; 
     const buffer = actx.createBuffer(1, length, actx.sampleRate);
     const data = buffer.getChannelData(0);
     for(let i=0; i<length; i++) data[i] = 0;
 
-    // Add random data chirps
     for(let b=0; b<6; b++) {
       const start = Math.floor(Math.random() * (length - actx.sampleRate * 0.2));
       const freq = 800 + Math.random() * 2000;
@@ -36,81 +149,21 @@ export default function App() {
         data[start + i] = Math.sin(2 * Math.PI * freq * i / actx.sampleRate) * 0.04;
       }
     }
-    // Add analog crackle
     for(let i=0; i<length; i++) {
       if(Math.random() > 0.9995) data[i] = (Math.random() * 2 - 1) * 0.15;
     }
     return buffer;
   }, []);
 
-  // The master sequence controller
-  const runSequence = useCallback(() => {
-    cleanupAudio();
-    timeoutsRef.current.forEach(clearTimeout);
-    timeoutsRef.current = [];
-
-    const actx = audioContextRef.current;
-    if (!actx) return;
-    const t0 = actx.currentTime;
-
-    // --- MECHANICAL CLICKS & FLASHES ---
-    setBootStage('tv-on-flash');
-    // Power On Audio: Heavy Thump
-    const thumpOsc = actx.createOscillator();
-    thumpOsc.type = 'square';
-    thumpOsc.frequency.setValueAtTime(150, t0);
-    thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
-    const thumpGain = actx.createGain();
-    thumpGain.gain.setValueAtTime(0.7, t0);
-    thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
-    thumpOsc.connect(thumpGain).connect(actx.destination);
-    thumpOsc.start(t0);
-    thumpOsc.stop(t0 + 0.15);
-    activeNodesRef.current.push(thumpOsc);
-
-    // Step 1: Reveal Background instantly after the 150ms flash
-    const tBoot = setTimeout(() => setBootStage('booting'), 150);
-
-    // --- WARNING BEEP SEQUENCE ---
-
-    // EAS Dual Tones (853Hz & 960Hz)
-    const easOsc1 = actx.createOscillator();
-    const easOsc2 = actx.createOscillator();
-    easOsc1.type = 'sawtooth'; easOsc2.type = 'sawtooth';
-    easOsc1.frequency.value = 853; easOsc2.frequency.value = 960;
-    const easGain = actx.createGain();
-    easGain.gain.setValueAtTime(0, t0);
-    // Burst 1 (0.2s - 0.7s)
-    easGain.gain.setValueAtTime(0.2, t0 + 0.2);
-    easGain.gain.setValueAtTime(0, t0 + 0.7);
-    // Burst 2 (1.2s - 1.7s)
-    easGain.gain.setValueAtTime(0.2, t0 + 1.2);
-    easGain.gain.setValueAtTime(0, t0 + 1.7);
-    easOsc1.connect(easGain); easOsc2.connect(easGain); easGain.connect(actx.destination);
-    easOsc1.start(t0 + 0.2); easOsc2.start(t0 + 0.2);
-    easOsc1.stop(t0 + 1.8); easOsc2.stop(t0 + 1.8);
-    activeNodesRef.current.push(easOsc1, easOsc2);
-
-    // SMPTE Sine Beep (1000Hz)
-    const sineOsc = actx.createOscillator();
-    sineOsc.type = 'sine';
-    sineOsc.frequency.value = 1000;
-    const sineGain = actx.createGain();
-    sineGain.gain.setValueAtTime(0, t0);
-    sineGain.gain.setValueAtTime(0.25, t0 + 2.2); // Beep: 2.2s - 3.2s
-    sineGain.gain.setValueAtTime(0, t0 + 3.2);
-    sineOsc.connect(sineGain).connect(actx.destination);
-    sineOsc.start(t0 + 2.2); sineOsc.stop(t0 + 3.3);
-    activeNodesRef.current.push(sineOsc);
-
-    // Step 2: Initiate Speech and Transmission Environment
+  // Reusable text-to-speech initiator
+  const startTransmissionTTS = useCallback((actx, delay) => {
     const tOn = setTimeout(() => {
       setBootStage('on');
-      window.speechSynthesis.cancel(); // Cancel any existing speech
+      window.speechSynthesis.cancel(); 
 
       const tNow = actx.currentTime;
 
-      // 1. Continuous White Noise Layer
+      // Noise Layer
       const noiseBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
       const output = noiseBuffer.getChannelData(0);
       for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
@@ -123,7 +176,7 @@ export default function App() {
       noiseSrc.start(tNow);
       activeNodesRef.current.push(noiseSrc);
 
-      // 2. Radio Hum & Telemetry Layer (60Hz + Clicks)
+      // Hum Layer
       const humOsc = actx.createOscillator();
       humOsc.type = 'sine';
       humOsc.frequency.value = 60;
@@ -133,6 +186,7 @@ export default function App() {
       humOsc.start(tNow);
       activeNodesRef.current.push(humOsc);
 
+      // Telemetry Layer
       const telemetrySrc = actx.createBufferSource();
       telemetrySrc.buffer = createTelemetryBuffer(actx);
       telemetrySrc.loop = true;
@@ -140,7 +194,7 @@ export default function App() {
       telemetrySrc.start(tNow);
       activeNodesRef.current.push(telemetrySrc);
 
-      // 3. Text to Speech
+      // Speech Synthesis
       const textToRead = "dee jay merk one. OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION. A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY. ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R AND B, LATIN MUSIC, AND DRIVING HOUSE MUSIC. SOUND IS ARCHITECTURE. ENGINEERING IS THE SCIENCE OF EMOTION. HE DOESN'T JUST RECORD MUSIC. HE ENGINEERS THE FUTURE. STAY TUNED.";
       const utterance = new SpeechSynthesisUtterance(textToRead);
       utteranceRef.current = utterance; 
@@ -153,26 +207,132 @@ export default function App() {
 
       utterance.onend = () => {
         setBootStage('nosignal');
-        cleanupAudio(); // Instantly mute static and hum
+        cleanupAudio();
       };
 
       window.speechSynthesis.speak(utterance);
-    }, 3200);
+    }, delay);
 
-    timeoutsRef.current.push(tBoot, tOn);
+    timeoutsRef.current.push(tOn);
   }, [cleanupAudio, createTelemetryBuffer]);
+
+  // SECRET ACTION: Emergency Reboot
+  const triggerSecretReboot = useCallback(() => {
+    cleanupAudio();
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+    setIsPong(false);
+    setBootStage('static'); // Instantly cut to raw interference
+    
+    const actx = audioContextRef.current;
+    if (!actx) return;
+    const t0 = actx.currentTime;
+
+    // Full 4-Second Emergency EAS Alert
+    const easOsc1 = actx.createOscillator();
+    const easOsc2 = actx.createOscillator();
+    easOsc1.type = 'sawtooth'; easOsc2.type = 'sawtooth';
+    easOsc1.frequency.value = 853; easOsc2.frequency.value = 960;
+    const easGain = actx.createGain();
+    easGain.gain.setValueAtTime(0.25, t0);
+    easGain.gain.setValueAtTime(0, t0 + 4.0);
+    easOsc1.connect(easGain); easOsc2.connect(easGain); easGain.connect(actx.destination);
+    easOsc1.start(t0); easOsc2.start(t0);
+    easOsc1.stop(t0 + 4.1); easOsc2.stop(t0 + 4.1);
+    activeNodesRef.current.push(easOsc1, easOsc2);
+
+    // SMPTE Sine Beep (1000Hz)
+    const sineOsc = actx.createOscillator();
+    sineOsc.type = 'sine';
+    sineOsc.frequency.value = 1000;
+    const sineGain = actx.createGain();
+    sineGain.gain.setValueAtTime(0, t0);
+    sineGain.gain.setValueAtTime(0.25, t0 + 4.2); // Beep: 4.2s - 5.2s
+    sineGain.gain.setValueAtTime(0, t0 + 5.2);
+    sineOsc.connect(sineGain).connect(actx.destination);
+    sineOsc.start(t0 + 4.2); sineOsc.stop(t0 + 5.3);
+    activeNodesRef.current.push(sineOsc);
+
+    // Start transmission after the alarms
+    startTransmissionTTS(actx, 5200);
+
+  }, [cleanupAudio, startTransmissionTTS]);
+
+  // INITIAL BOOT SEQUENCE
+  const runSequence = useCallback(() => {
+    cleanupAudio();
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+    setIsPong(false);
+
+    const actx = audioContextRef.current;
+    if (!actx) return;
+    const t0 = actx.currentTime;
+
+    setBootStage('tv-on-flash');
+    const thumpOsc = actx.createOscillator();
+    thumpOsc.type = 'square';
+    thumpOsc.frequency.setValueAtTime(150, t0);
+    thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+    const thumpGain = actx.createGain();
+    thumpGain.gain.setValueAtTime(0.7, t0);
+    thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+    thumpOsc.connect(thumpGain).connect(actx.destination);
+    thumpOsc.start(t0);
+    thumpOsc.stop(t0 + 0.15);
+    activeNodesRef.current.push(thumpOsc);
+
+    const tBoot = setTimeout(() => setBootStage('booting'), 150);
+
+    // EAS Dual Tones (853Hz & 960Hz) Short Bursts
+    const easOsc1 = actx.createOscillator();
+    const easOsc2 = actx.createOscillator();
+    easOsc1.type = 'sawtooth'; easOsc2.type = 'sawtooth';
+    easOsc1.frequency.value = 853; easOsc2.frequency.value = 960;
+    const easGain = actx.createGain();
+    easGain.gain.setValueAtTime(0, t0);
+    easGain.gain.setValueAtTime(0.2, t0 + 0.2); easGain.gain.setValueAtTime(0, t0 + 0.7);
+    easGain.gain.setValueAtTime(0.2, t0 + 1.2); easGain.gain.setValueAtTime(0, t0 + 1.7);
+    easOsc1.connect(easGain); easOsc2.connect(easGain); easGain.connect(actx.destination);
+    easOsc1.start(t0 + 0.2); easOsc2.start(t0 + 0.2);
+    easOsc1.stop(t0 + 1.8); easOsc2.stop(t0 + 1.8);
+    activeNodesRef.current.push(easOsc1, easOsc2);
+
+    const sineOsc = actx.createOscillator();
+    sineOsc.type = 'sine';
+    sineOsc.frequency.value = 1000;
+    const sineGain = actx.createGain();
+    sineGain.gain.setValueAtTime(0, t0);
+    sineGain.gain.setValueAtTime(0.25, t0 + 2.2); 
+    sineGain.gain.setValueAtTime(0, t0 + 3.2);
+    sineOsc.connect(sineGain).connect(actx.destination);
+    sineOsc.start(t0 + 2.2); sineOsc.stop(t0 + 3.3);
+    activeNodesRef.current.push(sineOsc);
+
+    timeoutsRef.current.push(tBoot);
+    startTransmissionTTS(actx, 3200);
+
+  }, [cleanupAudio, startTransmissionTTS]);
 
   // Video source handler
   useEffect(() => {
     if (videoRef.current) {
-      if (bootStage === 'nosignal' || bootStage === 'off' || bootStage === 'final-tv-on-flash') {
+      if (bootStage === 'final-screen' || bootStage === 'final-tv-on-flash') {
+        videoRef.current.src = "/last.mp4";
         videoRef.current.load();
-        videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+        videoRef.current.play().catch(e => console.log(e));
+      } else if (bootStage === 'nosignal' || bootStage === 'tv-off-anim') {
+        videoRef.current.src = "/static.mp4";
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log(e));
       } else if (bootStage === 'permanently-off') {
-        // Fully stop and clear video resources on final power down
         videoRef.current.pause();
         videoRef.current.removeAttribute('src'); 
         videoRef.current.load();
+      } else {
+        videoRef.current.src = "/noise.mp4";
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log(e));
       }
     }
   }, [bootStage]);
@@ -187,7 +347,6 @@ export default function App() {
       }, 7000);
     } 
     else if (bootStage === 'tv-off-anim') {
-      // Play a classic power-down "zip" sound
       if (audioContextRef.current) {
         const actx = audioContextRef.current;
         const osc = actx.createOscillator();
@@ -201,7 +360,6 @@ export default function App() {
         osc.stop(actx.currentTime + 0.15);
         activeNodesRef.current.push(osc);
       }
-      // Wait for the CSS animation to complete, then hide everything
       timeout = setTimeout(() => {
         setBootStage('permanently-off');
       }, 600); 
@@ -209,14 +367,12 @@ export default function App() {
     else if (bootStage === 'permanently-off') {
       timeout = setTimeout(() => {
         setBootStage('final-tv-on-flash');
-      }, 3000); // Wait 3 seconds in darkness
+      }, 3000); 
     } 
     else if (bootStage === 'final-tv-on-flash') {
       if (audioContextRef.current) {
         const actx = audioContextRef.current;
         const t0 = actx.currentTime;
-        
-        // Power On Audio: Heavy Thump
         const thumpOsc = actx.createOscillator();
         thumpOsc.type = 'square';
         thumpOsc.frequency.setValueAtTime(150, t0);
@@ -229,7 +385,6 @@ export default function App() {
         thumpOsc.stop(t0 + 0.15);
         activeNodesRef.current.push(thumpOsc);
 
-        // Add a low-volume ambient hiss so it's not dead silent
         const noiseBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
         const output = noiseBuffer.getChannelData(0);
         for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
@@ -242,7 +397,6 @@ export default function App() {
         noiseSrc.start(t0);
         activeNodesRef.current.push(noiseSrc);
       }
-
       timeout = setTimeout(() => {
         setBootStage('final-screen');
       }, 150);
@@ -250,6 +404,59 @@ export default function App() {
     
     return () => clearTimeout(timeout);
   }, [bootStage]);
+
+  // SECRET CODE KEYSTROKE TRACKER
+  useEffect(() => {
+    const handleGlobalKeydown = (e) => {
+      if (bootStage !== 'final-screen') return;
+
+      const key = e.key;
+      let mapped = '';
+      if (key === 'ArrowUp') mapped = 'U';
+      else if (key === 'ArrowDown') mapped = 'D';
+      else if (key === 'ArrowLeft') mapped = 'L';
+      else if (key === 'ArrowRight') mapped = 'R';
+      else if (key.toLowerCase() === 'b') mapped = 'B';
+      else if (key.toLowerCase() === 'a') mapped = 'A';
+      else if (key === 'Enter') mapped = 'E';
+
+      if (mapped) {
+        secretBufferRef.current += mapped;
+        if (secretBufferRef.current.length > 20) {
+          secretBufferRef.current = secretBufferRef.current.slice(-20);
+        }
+
+        // KONAMI CODE PONG
+        if (secretBufferRef.current.endsWith('UUDDLRLRBAE')) {
+          secretBufferRef.current = '';
+          setIsPong(true);
+          const actx = audioContextRef.current;
+          if (actx) {
+             const osc = actx.createOscillator();
+             osc.type = 'square';
+             const gain = actx.createGain();
+             osc.connect(gain).connect(actx.destination);
+             osc.frequency.setValueAtTime(440, actx.currentTime); // A4
+             osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); // A5
+             osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); // A6
+             gain.gain.setValueAtTime(0.2, actx.currentTime);
+             gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.6);
+             osc.start(actx.currentTime);
+             osc.stop(actx.currentTime + 0.6);
+          }
+        }
+        
+        // REBOOT EMERGENCY
+        if (secretBufferRef.current.endsWith('DULLARD')) {
+           secretBufferRef.current = '';
+           triggerSecretReboot();
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleGlobalKeydown);
+    return () => window.removeEventListener('keydown', handleGlobalKeydown);
+  }, [bootStage, triggerSecretReboot]);
 
   // Total cleanup on unmount
   useEffect(() => {
@@ -316,7 +523,6 @@ export default function App() {
             animation: broadcast-scroll 35s linear forwards;
           }
           
-          /* CRT Squish and Fade Animation */
           @keyframes tv-off-squish {
             0% { transform: scale(1, 1); filter: brightness(1); }
             40% { transform: scale(1, 0.005); filter: brightness(10); }
@@ -392,19 +598,14 @@ export default function App() {
         <div className={`absolute inset-0 z-[200] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'tv-on-flash' || bootStage === 'final-tv-on-flash' ? 'opacity-100' : 'opacity-0'}`}></div>
 
         {/* Main TV Frame */}
-        {/* We use #151515 to simulate the dark grey color of an powered-down glass CRT screen */}
         <div className="relative w-full h-full bg-[#151515] rounded-[40px] md:rounded-[80px] overflow-hidden flex items-center justify-center global-bloom-wrap shadow-[0_0_150px_rgba(0,0,0,1)] ring-[24px] ring-[#0a0a0a]">
           
-          {/* Active Signal Layer (Disappears entirely when permanently off) */}
+          {/* Active Signal Layer */}
           <div className={`absolute inset-0 w-full h-full ${bootStage === 'tv-off-anim' ? 'animate-tv-off' : ''} ${bootStage === 'permanently-off' ? 'hidden' : 'block'}`}>
             
             {/* 1. VIDEO BACKGROUND */}
             <video
               ref={videoRef}
-              src={
-                bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? "/last.mp4" :
-                (bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? "/static.mp4" : "/noise.mp4")
-              }
               className={`noise-video z-0 ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
               loop
               muted
@@ -414,7 +615,7 @@ export default function App() {
             {/* 2. FULL-WIDTH RGB ARTIFACTS OVERLAY */}
             <div className="rgb-artifacts-full"></div>
 
-            {/* 3. MUTE ICON (Displays during No Signal) */}
+            {/* 3. MUTE ICON */}
             {(bootStage === 'nosignal' || bootStage === 'tv-off-anim') && (
               <div className="absolute top-6 left-8 md:top-10 md:left-12 z-[70] vcr-font text-[#0f0] text-4xl md:text-6xl blink-text !text-shadow-none pointer-events-none" style={{textShadow: '0 0 10px #0f0'}}>
                 MUTE
@@ -422,31 +623,33 @@ export default function App() {
             )}
 
             {/* 4. MAIN CONTENT */}
-            {(bootStage === 'nosignal' || bootStage === 'tv-off-anim') ? (
+            {bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-                <a 
-                  href="https://djmerkone.com" 
-                  className="vcr-font text-6xl md:text-8xl hover:text-red-500 transition-colors duration-200 cursor-pointer"
-                >
+                <a href="https://djmerkone.com" className="vcr-font text-6xl md:text-8xl hover:text-red-500 transition-colors duration-200 cursor-pointer">
                   NO SIGNAL
                 </a>
               </div>
             ) : bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? (
-              <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
-                <div className="absolute w-full max-w-4xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-4 md:gap-8">
-                  <p className="text-5xl md:text-8xl mb-2">djmerkone</p>
-                  <p className="text-3xl md:text-5xl opacity-90 leading-relaxed">
-                    once your girlfriend's favorite dj,<br/>
-                    now your wife's favorite sound...
-                  </p>
-                  <p className="text-4xl md:text-6xl mt-8">website coming soon</p>
-                </div>
-                
-                {/* Tiny CRT Footer Text */}
-                <div className="absolute bottom-6 md:bottom-10 w-full text-center vcr-font text-sm md:text-lg opacity-70 px-4">
-                  click <a href="#" onClick={(e) => { e.preventDefault(); window.location.reload(); }} className="hover:text-[#0f0] transition-colors pointer-events-auto">reload</a> to watch again, or go to <a href="https://djmerkone.com" className="hover:text-[#0f0] transition-colors pointer-events-auto">djmerkone.com</a> for more info
-                </div>
-              </div>
+              <>
+                {isPong ? (
+                  <PongGame />
+                ) : (
+                  <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
+                    <div className="absolute w-full max-w-4xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-4 md:gap-8">
+                      <p className="text-5xl md:text-8xl mb-2">djmerkone</p>
+                      <p className="text-3xl md:text-5xl opacity-90 leading-relaxed">
+                        once your girlfriend's favorite dj,<br/>
+                        now your wife's favorite sound...
+                      </p>
+                      <p className="text-4xl md:text-6xl mt-8">website coming soon</p>
+                    </div>
+                    
+                    <div className="absolute bottom-6 md:bottom-10 w-full text-center vcr-font text-sm md:text-lg opacity-70 px-4">
+                      click <a href="#" onClick={(e) => { e.preventDefault(); window.location.reload(); }} className="hover:text-[#0f0] transition-colors pointer-events-auto">reload</a> to watch again, or go to <a href="https://djmerkone.com" className="hover:text-[#0f0] transition-colors pointer-events-auto">djmerkone.com</a> for more info
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-700 ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
                 <div className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
@@ -468,7 +671,7 @@ export default function App() {
             <div className="scanlines-overlay"></div>
           </div>
           
-          {/* 7. VIGNETTE (Kept outside the turn-off animation so the TV box maintains depth) */}
+          {/* 7. VIGNETTE */}
           <div className="crt-vignette-bezel"></div>
 
         </div>
