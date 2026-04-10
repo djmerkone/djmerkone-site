@@ -857,14 +857,22 @@ export default function App() {
             font-size: 1.8rem;
             letter-spacing: 0.1em;
             line-height: 1.4;
+            /* Brighter, melting edges blending with the static */
             text-shadow: 
-              -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
-              -4px 0 2px rgba(255, 0, 80, 0.6), 4px 0 2px rgba(0, 255, 255, 0.6),
-              0 0 25px rgba(255,255,255,0.9), 0 0 45px rgba(255,255,255,0.7), 0 0 70px rgba(255,255,255,0.4);
+              -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,0.8),
+              -4px 0 3px rgba(255, 0, 80, 0.9), 4px 0 3px rgba(0, 255, 255, 0.9),
+              0 0 12px rgba(255,255,255,1), 0 0 25px rgba(255,255,255,0.9), 
+              0 0 45px rgba(255,255,255,0.8), 0 0 85px rgba(255,255,255,0.6);
           }
 
           @media (min-width: 768px) {
             .vcr-font { font-size: 2.5rem; letter-spacing: 0.15em; }
+          }
+
+          /* Helper class for wider, stretched text */
+          .wide-text {
+            display: inline-block;
+            transform: scaleX(1.2);
           }
 
           @keyframes artifact-hop {
@@ -997,17 +1005,15 @@ export default function App() {
                   <GalagaGame audioCtx={audioContextRef.current} />
                 ) : (
                   <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
-                    <div className="absolute w-full max-w-4xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-4 md:gap-8">
-                      <p className="text-5xl md:text-8xl mb-2">djmerkone</p>
-                      <p className="text-3xl md:text-5xl opacity-90 leading-relaxed">
-                        once your girlfriend's favorite dj,<br/>
-                        now your wife's favorite sound...
-                      </p>
-                      <p className="text-4xl md:text-6xl mt-8">website coming soon</p>
+                    <div className="absolute w-full px-2 text-center vcr-font select-none flex flex-col gap-5 md:gap-8 whitespace-nowrap overflow-visible">
+                      <p className="text-6xl md:text-[8vw] mb-2 leading-none"><span className="wide-text">djmerkone</span></p>
+                      <p className="text-2xl sm:text-4xl md:text-[3.5vw] opacity-90 leading-none"><span className="wide-text">once your girlfriend's favorite dj,</span></p>
+                      <p className="text-2xl sm:text-4xl md:text-[3.5vw] opacity-90 leading-none"><span className="wide-text">now your wife's favorite sound...</span></p>
+                      <p className="text-4xl sm:text-6xl md:text-[5vw] mt-4 md:mt-8 leading-none"><span className="wide-text">website coming soon</span></p>
                     </div>
                     
-                    <div className="absolute bottom-6 md:bottom-10 w-full text-center vcr-font text-sm md:text-lg opacity-70 px-4">
-                      click <a href="#" onClick={(e) => { e.preventDefault(); window.location.reload(); }} className="hover:text-[#0f0] transition-colors pointer-events-auto">reload</a> to watch again, or go to <a href="https://djmerkone.com" className="hover:text-[#0f0] transition-colors pointer-events-auto">djmerkone.com</a> for more info
+                    <div className="absolute bottom-6 md:bottom-10 w-full text-center vcr-font text-xs sm:text-sm md:text-[1.5vw] opacity-70 px-2 whitespace-nowrap overflow-visible">
+                      <span className="wide-text">click <a href="#" onClick={(e) => { e.preventDefault(); window.location.reload(); }} className="hover:text-[#0f0] transition-colors pointer-events-auto">reload</a> to watch again, or go to <a href="https://djmerkone.com" className="hover:text-[#0f0] transition-colors pointer-events-auto">djmerkone.com</a> for more info</span>
                     </div>
                   </div>
                 )}
