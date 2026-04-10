@@ -211,27 +211,55 @@ const GalagaGame = ({ audioCtx }) => {
 
     const formatScore = (s) => String(s).padStart(6, '0');
 
+    // Helper function for authentic CRT text drawing with chromatic aberration
+    const drawCRTText = (text, x, y, color, font, align = 'center') => {
+      ctx.font = font;
+      ctx.textAlign = align;
+      
+      // Magenta shift
+      ctx.fillStyle = 'rgba(255, 0, 255, 0.5)';
+      ctx.shadowBlur = 0;
+      ctx.fillText(text, x - 1, y);
+      
+      // Cyan shift
+      ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+      ctx.fillText(text, x + 1, y);
+      
+      // Core text + specific color bloom
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12;
+      ctx.fillText(text, x, y);
+      
+      // Reset shadow
+      ctx.shadowBlur = 0;
+    };
+
     const draw = () => {
       let gs = state.current;
       
+      // Clear screen
       ctx.fillStyle = '#000';
+      ctx.shadowBlur = 0;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // Starfield with subtle glow
       ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 5;
       gs.stars.forEach(s => { ctx.fillRect(s.x, s.y, 2, 2); });
+      ctx.shadowBlur = 0;
 
       if (gs.status === 'start') {
-        ctx.fillStyle = '#0f0';
-        ctx.font = '60px "VT323", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText("SPACE DEFENDER", 400, 250);
-        ctx.fillStyle = '#fff';
-        ctx.font = '24px "VT323", monospace';
-        ctx.fillText("PRESS ENTER TO START", 400, 320);
-        ctx.fillText("ARROWS: Move  |  SPACE: Shoot", 400, 370);
+        drawCRTText("SPACE DEFENDER", 400, 250, '#0f0', '60px "VT323", monospace');
+        drawCRTText("PRESS ENTER TO START", 400, 320, '#fff', '24px "VT323", monospace');
+        drawCRTText("ARROWS: Move  |  SPACE: Shoot", 400, 370, '#fff', '24px "VT323", monospace');
         return;
       }
 
+      // Player glow
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = 12;
       if (imgPlayer.complete) {
         ctx.drawImage(imgPlayer, gs.player.x, gs.player.y, gs.player.w, gs.player.h);
       } else {
@@ -240,37 +268,53 @@ const GalagaGame = ({ audioCtx }) => {
         ctx.lineTo(gs.player.x + gs.player.w, gs.player.y + gs.player.h);
         ctx.lineTo(gs.player.x, gs.player.y + gs.player.h); ctx.fill();
       }
+      ctx.shadowBlur = 0;
 
+      // Enemy specific glows
+      const glowColors = ['#f0f', '#f00', '#0f0'];
       gs.enemies.forEach(e => {
+        ctx.shadowColor = glowColors[e.type];
+        ctx.shadowBlur = 12;
         const eImg = enemyImgs[e.type];
         if (eImg && eImg.complete) {
           ctx.drawImage(eImg, e.x, e.y, e.w, e.h);
         } else {
-          ctx.fillStyle = ['#f0f', '#f00', '#0f0'][e.type];
+          ctx.fillStyle = glowColors[e.type];
           ctx.fillRect(e.x, e.y, e.w, e.h);
         }
       });
+      ctx.shadowBlur = 0;
 
-      ctx.fillStyle = '#0ff'; // Player bullets
+      // Glowing player bullets
+      ctx.fillStyle = '#0ff'; 
+      ctx.shadowColor = '#0ff';
+      ctx.shadowBlur = 10;
       gs.bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+      ctx.shadowBlur = 0;
 
-      ctx.fillStyle = '#f00'; // Enemy bullets
+      // Glowing enemy bullets
+      ctx.fillStyle = '#f00';
+      ctx.shadowColor = '#f00';
+      ctx.shadowBlur = 10;
       gs.enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, eb.w, eb.h));
+      ctx.shadowBlur = 0;
 
+      // Fiery glowing particles
       gs.particles.forEach(p => {
         ctx.fillStyle = `rgba(255, 150, 0, ${p.life / 30})`;
+        ctx.shadowColor = '#fa0';
+        ctx.shadowBlur = 8;
         ctx.fillRect(p.x, p.y, 4, 4);
       });
+      ctx.shadowBlur = 0;
 
-      // Draw UI
-      ctx.fillStyle = '#fff';
-      ctx.font = '24px "VT323", monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(`SCORE: ${formatScore(gs.score)}`, 20, 30);
-      ctx.textAlign = 'center';
-      ctx.fillText(`HI-SCORE: ${formatScore(gs.highScore)}`, 400, 30);
-      ctx.textAlign = 'right';
-      ctx.fillText(`LIVES:`, 680, 30);
+      // Draw UI with Chromatic Bloom
+      drawCRTText(`SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(`HI-SCORE: ${formatScore(gs.highScore)}`, 400, 30, '#fff', '24px "VT323", monospace');
+      drawCRTText(`LIVES:`, 680, 30, '#fff', '24px "VT323", monospace', 'right');
+      
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = 10;
       for(let i=0; i<gs.lives; i++) {
         let lx = 690 + (i * 25);
         if (imgPlayer.complete) {
@@ -280,21 +324,18 @@ const GalagaGame = ({ audioCtx }) => {
           ctx.moveTo(lx + 8, 10); ctx.lineTo(lx + 16, 26); ctx.lineTo(lx, 26); ctx.fill();
         }
       }
+      ctx.shadowBlur = 0;
 
       if (gs.status === 'gameover') {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        ctx.fillStyle = '#f00'; ctx.font = '80px "VT323", monospace';
-        ctx.textAlign = 'center'; ctx.fillText("GAME OVER", 400, 280);
-        ctx.fillStyle = '#fff'; ctx.font = '30px "VT323", monospace';
-        ctx.fillText("PRESS ENTER TO RESTART", 400, 350);
+        drawCRTText("GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
+        drawCRTText("PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
       }
 
       if (gs.status === 'levelcleared') {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        ctx.fillStyle = '#0f0'; ctx.font = '60px "VT323", monospace';
-        ctx.textAlign = 'center'; ctx.fillText(`WAVE ${gs.wave} CLEARED!`, 400, 280);
-        ctx.fillStyle = '#fff'; ctx.font = '30px "VT323", monospace';
-        ctx.fillText("PRESS ENTER TO CONTINUE", 400, 350);
+        drawCRTText(`WAVE ${gs.wave} CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
+        drawCRTText("PRESS ENTER TO CONTINUE", 400, 350, '#fff', '30px "VT323", monospace');
       }
     };
 
@@ -679,7 +720,11 @@ export default function App() {
   // Video source handler
   useEffect(() => {
     if (videoRef.current) {
-      if (bootStage === 'final-screen' || bootStage === 'final-tv-on-flash') {
+      if (isSecretGame) {
+        videoRef.current.src = "/game.mp4";
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log(e));
+      } else if (bootStage === 'final-screen' || bootStage === 'final-tv-on-flash') {
         videoRef.current.src = "/last.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
@@ -697,7 +742,7 @@ export default function App() {
         videoRef.current.play().catch(e => console.log(e));
       }
     }
-  }, [bootStage]);
+  }, [bootStage, isSecretGame]);
 
   // Master State Machine for Outro Sequences
   useEffect(() => {
@@ -978,7 +1023,7 @@ export default function App() {
             {/* 1. VIDEO BACKGROUND */}
             <video
               ref={videoRef}
-              className={`noise-video ${bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? 'z-[15] mix-blend-screen pointer-events-none' : 'z-0'} ${bootStage === 'off' || isSecretGame ? 'opacity-0' : 'opacity-85'}`}
+              className={`noise-video ${bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' || isSecretGame ? 'z-[15] mix-blend-screen pointer-events-none' : 'z-0'} ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
               loop
               muted
               playsInline
