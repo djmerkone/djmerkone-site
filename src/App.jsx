@@ -25,25 +25,66 @@ const buildTracks = async (actx) => {
   }
   const startBuf = await o1.startRendering();
 
-  // Track 2: Playing (8s loop = 4 bars at 120bpm) - Kick & Synth Bass
-  const o2 = new WAudioContext(1, 8 * sr, sr);
-  for(let beat=0; beat<16; beat++) {
+  // Track 2: Playing (64s loop = 32 bars at 120bpm) - NES Style Multi-Layer Synth
+  const o2 = new WAudioContext(1, 64 * sr, sr);
+  
+  // 4 Progression Sections (8 bars / 32 beats each)
+  const sections = [
+    { bass: 32.70, pad: [130.81, 155.56, 196.00], arp: [261.63, 311.13, 392.00, 523.25] }, // Cm
+    { bass: 25.96, pad: [103.83, 130.81, 155.56], arp: [207.65, 261.63, 311.13, 415.30] }, // Ab
+    { bass: 43.65, pad: [87.31,  103.83, 130.81], arp: [174.61, 207.65, 261.63, 349.23] }, // Fm
+    { bass: 49.00, pad: [98.00,  123.47, 146.83], arp: [196.00, 246.94, 293.66, 392.00] }  // G
+  ];
+
+  for(let beat=0; beat<128; beat++) {
     let t = beat * 0.5;
-    // Kick Drum
+    let sectionIdx = Math.floor(beat / 32);
+    let sec = sections[sectionIdx];
+
+    // Kick Drum (every beat)
     let k = o2.createOscillator(); k.type = 'square';
     k.frequency.setValueAtTime(100, t); k.frequency.exponentialRampToValueAtTime(10, t+0.1);
     let kg = o2.createGain(); kg.gain.setValueAtTime(0.4, t); kg.gain.linearRampToValueAtTime(0.01, t+0.1);
     k.connect(kg).connect(o2.destination); k.start(t); k.stop(t+0.1);
-    
-    // Driving 16th Note Bassline
+
+    // Sine Pad (chords change every bar/4 beats)
+    if (beat % 4 === 0) {
+      sec.pad.forEach(freq => {
+        let p = o2.createOscillator(); p.type = 'sine';
+        p.frequency.value = freq;
+        let pg = o2.createGain(); 
+        pg.gain.setValueAtTime(0, t); 
+        pg.gain.linearRampToValueAtTime(0.05, t + 0.5); // Fade in
+        pg.gain.setValueAtTime(0.05, t + 1.5);
+        pg.gain.linearRampToValueAtTime(0, t + 2.0); // Fade out
+        p.connect(pg).connect(o2.destination); p.start(t); p.stop(t+2.0);
+      });
+    }
+
+    // Driving 16th Note Triangle Bassline (NES classic)
     for(let step=0; step<4; step++) {
       let bt = t + step * 0.125;
-      let b = o2.createOscillator(); b.type = 'sawtooth';
-      let freq = [32.7, 32.7, 32.7, 38.89][beat%4]; // C1, Eb1
-      if(step===2) freq = 65.41; // Octave pop on offbeats
+      let b = o2.createOscillator(); b.type = 'triangle';
+      let freq = sec.bass; 
+      if (step === 2 && beat % 2 === 0) freq *= 2; // Octave pop on specific offbeats
       b.frequency.value = freq;
-      let bg = o2.createGain(); bg.gain.setValueAtTime(0.12, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.1);
+      let bg = o2.createGain(); bg.gain.setValueAtTime(0.18, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.1);
       b.connect(bg).connect(o2.destination); b.start(bt); b.stop(bt+0.1);
+    }
+
+    // Sawtooth Arpeggio Melody (8th notes)
+    for(let step=0; step<2; step++) {
+      let bt = t + step * 0.25;
+      let m = o2.createOscillator(); m.type = 'sawtooth';
+      
+      // Vary the arp direction based on the section
+      let arpIdx = (sectionIdx % 2 === 0) ? ((beat * 2 + step) % 4) : (3 - ((beat * 2 + step) % 4));
+      
+      m.frequency.value = sec.arp[arpIdx];
+      let mg = o2.createGain(); 
+      mg.gain.setValueAtTime(0.04, bt); 
+      mg.gain.exponentialRampToValueAtTime(0.001, bt+0.2);
+      m.connect(mg).connect(o2.destination); m.start(bt); m.stop(bt+0.2);
     }
   }
   const playBuf = await o2.startRendering();
@@ -85,11 +126,22 @@ const GalagaGame = ({ audioCtx }) => {
     enemyBullets: [],
     enemies: [],
     particles: [],
-    stars: Array(100).fill().map(() => ({ 
-      x: Math.random() * 800, 
-      y: Math.random() * 600, 
-      speed: 3 + Math.random() * 8 
-    })),
+    stars: Array(100).fill().map(() => {
+      const isColored = Math.random() < 0.20; // Approx 20% colored stars
+      const colors = [
+        'rgba(0, 255, 255, 0.4)',   // Cyan
+        'rgba(255, 0, 255, 0.4)',   // Magenta
+        'rgba(255, 255, 0, 0.4)'    // Yellow
+      ];
+      const starColor = isColored ? colors[Math.floor(Math.random() * colors.length)] : '#ffffff';
+      return { 
+        x: Math.random() * 800, 
+        y: Math.random() * 600, 
+        speed: 3 + Math.random() * 8,
+        color: starColor,
+        shadow: isColored ? starColor : 'rgba(255, 255, 255, 0.5)'
+      };
+    }),
     lastShot: 0
   });
 
@@ -286,10 +338,13 @@ const GalagaGame = ({ audioCtx }) => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-      ctx.shadowBlur = 5;
-      gs.stars.forEach(s => { ctx.fillRect(s.x, s.y, 2, 2); });
+      // Render Stars
+      gs.stars.forEach(s => { 
+        ctx.fillStyle = s.color;
+        ctx.shadowColor = s.shadow;
+        ctx.shadowBlur = 5;
+        ctx.fillRect(s.x, s.y, 2, 2); 
+      });
       ctx.shadowBlur = 0;
 
       if (gs.status === 'start') {
