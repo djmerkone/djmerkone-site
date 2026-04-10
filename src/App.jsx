@@ -857,12 +857,14 @@ export default function App() {
             font-size: 1.8rem;
             letter-spacing: 0.1em;
             line-height: 1.4;
-            /* Brighter, melting edges blending with the static */
+            /* Authentic CRT phosphor glow matching the dominant text color */
+            /* Max 1px subtle chromatic aberration with tight, luminous spread */
             text-shadow: 
-              -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,0.8),
-              -4px 0 3px rgba(255, 0, 80, 0.9), 4px 0 3px rgba(0, 255, 255, 0.9),
-              0 0 12px rgba(255,255,255,1), 0 0 25px rgba(255,255,255,0.9), 
-              0 0 45px rgba(255,255,255,0.8), 0 0 85px rgba(255,255,255,0.6);
+              -1px 0 1px rgba(255, 0, 255, 0.5), 
+               1px 0 1px rgba(0, 255, 255, 0.5),
+               0 0 3px currentColor, 
+               0 0 8px currentColor, 
+               0 0 15px currentColor;
           }
 
           @media (min-width: 768px) {
@@ -976,7 +978,7 @@ export default function App() {
             {/* 1. VIDEO BACKGROUND */}
             <video
               ref={videoRef}
-              className={`noise-video z-0 ${bootStage === 'off' || isSecretGame ? 'opacity-0' : 'opacity-85'}`}
+              className={`noise-video ${bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? 'z-[15] mix-blend-screen pointer-events-none' : 'z-0'} ${bootStage === 'off' || isSecretGame ? 'opacity-0' : 'opacity-85'}`}
               loop
               muted
               playsInline
