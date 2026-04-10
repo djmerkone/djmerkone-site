@@ -1,14 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 export default function App() {
-  const [bootStage, setBootStage] = useState('off'); // 'off', 'static', 'on'
+  const [bootStage, setBootStage] = useState('off'); // 'off', 'static', 'on', 'nosignal'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
   const noiseNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
+  const utteranceRef = useRef(null); // Keeps TTS from being garbage collected
 
-  // Stop TTS if user navigates away or unmounts
+  // Ensure video auto-plays when switching sources to static.mp4
+  useEffect(() => {
+    if (bootStage === 'nosignal' && videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+    }
+  }, [bootStage]);
+
+  // Stop TTS and Audio if user navigates away or unmounts
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel();
@@ -42,46 +51,56 @@ export default function App() {
     
     const timeNow = actx.currentTime;
 
-    // --- AUDIO SEQUENCE ---
+    // --- NEW AUDIO SEQUENCE ---
 
-    // A: Brief Static Burst (0ms to 300ms)
-    const burstDuration = 0.3;
-    const burstBuffer = actx.createBuffer(1, actx.sampleRate * burstDuration, actx.sampleRate);
-    const burstOutput = burstBuffer.getChannelData(0);
-    for (let i = 0; i < burstOutput.length; i++) {
-      burstOutput[i] = Math.random() * 2 - 1;
-    }
-    const burstSource = actx.createBufferSource();
-    burstSource.buffer = burstBuffer;
-    const burstGain = actx.createGain();
-    burstGain.gain.setValueAtTime(0.15, timeNow);
-    burstSource.connect(burstGain).connect(actx.destination);
-    burstSource.start(timeNow);
+    // A: EAS Dual Tone Alert (Sawtooth waves at 853Hz and 960Hz)
+    const easOsc1 = actx.createOscillator();
+    const easOsc2 = actx.createOscillator();
+    easOsc1.type = 'sawtooth';
+    easOsc2.type = 'sawtooth';
+    easOsc1.frequency.value = 853; 
+    easOsc2.frequency.value = 960; 
+    
+    const easGain = actx.createGain();
+    easGain.gain.setValueAtTime(0, timeNow);
+    
+    // Burst 1: 0.0s to 0.5s
+    easGain.gain.setValueAtTime(0.2, timeNow);
+    easGain.gain.setValueAtTime(0, timeNow + 0.5);
+    // Pause: 0.5s to 1.0s
+    
+    // Burst 2: 1.0s to 1.5s
+    easGain.gain.setValueAtTime(0.2, timeNow + 1.0);
+    easGain.gain.setValueAtTime(0, timeNow + 1.5);
+    // Pause: 1.5s to 2.0s
+    
+    easOsc1.connect(easGain);
+    easOsc2.connect(easGain);
+    easGain.connect(actx.destination);
+    
+    easOsc1.start(timeNow);
+    easOsc2.start(timeNow);
+    easOsc1.stop(timeNow + 1.6);
+    easOsc2.stop(timeNow + 1.6);
 
-    // B: SMPTE Dual Tone (300ms to 850ms)
-    const osc1 = actx.createOscillator();
-    const osc2 = actx.createOscillator();
-    osc1.type = 'sine';
-    osc2.type = 'sine';
-    osc1.frequency.value = 400; // Tone 1
-    osc2.frequency.value = 1000; // Tone 2
+    // B: 1-Second Sinewave Beep (1000Hz)
+    const sineOsc = actx.createOscillator();
+    sineOsc.type = 'sine';
+    sineOsc.frequency.value = 1000;
     
-    const toneGain = actx.createGain();
-    toneGain.gain.setValueAtTime(0, timeNow);
-    // Boosted volume significantly from 0.04 to 0.25 for clear audibility
-    toneGain.gain.setValueAtTime(0.25, timeNow + 0.3); // Fade in at 300ms
-    toneGain.gain.setValueAtTime(0, timeNow + 0.85);   // Cut off at 850ms
+    const sineGain = actx.createGain();
+    sineGain.gain.setValueAtTime(0, timeNow);
+    // Beep: 2.0s to 3.0s
+    sineGain.gain.setValueAtTime(0.25, timeNow + 2.0); 
+    sineGain.gain.setValueAtTime(0, timeNow + 3.0);   
     
-    osc1.connect(toneGain);
-    osc2.connect(toneGain);
-    toneGain.connect(actx.destination);
+    sineOsc.connect(sineGain);
+    sineGain.connect(actx.destination);
     
-    osc1.start(timeNow + 0.3);
-    osc2.start(timeNow + 0.3);
-    osc1.stop(timeNow + 0.9);
-    osc2.stop(timeNow + 0.9);
+    sineOsc.start(timeNow + 2.0);
+    sineOsc.stop(timeNow + 3.1);
 
-    // C: Continuous Background Noise (Starts at 850ms)
+    // C: Continuous Background Noise (Starts exactly at 3.0s)
     const contBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
     const contOutput = contBuffer.getChannelData(0);
     for (let i = 0; i < contOutput.length; i++) {
@@ -93,41 +112,50 @@ export default function App() {
     
     gainNodeRef.current = actx.createGain();
     gainNodeRef.current.gain.setValueAtTime(0, timeNow);
-    gainNodeRef.current.gain.setValueAtTime(0.03, timeNow + 0.85); // Fade in after tones
+    gainNodeRef.current.gain.setValueAtTime(0.04, timeNow + 3.0); 
     
     noiseNodeRef.current.connect(gainNodeRef.current).connect(actx.destination);
-    noiseNodeRef.current.start(timeNow + 0.85);
+    noiseNodeRef.current.start(timeNow + 3.0);
 
     // --- VISUAL & TTS SEQUENCE ---
     
-    // Switch to static visual at 300ms
-    setTimeout(() => setBootStage('static'), 300);
+    // Switch to intense static burst at 2.7s
+    setTimeout(() => setBootStage('static'), 2700);
     
-    // Switch to 'on' visual and trigger TTS at 850ms
+    // Switch to 'on' visual and trigger TTS at exactly 3.0s
     setTimeout(() => {
       setBootStage('on');
 
-      // Cancel any ongoing speech just in case
       window.speechSynthesis.cancel();
 
-      // Phonetically spelled "dee jay merk one" for proper text-to-speech reading
+      // Phonetically spelled for TTS
       const textToRead = "dee jay merk one. OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION. A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY. ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R AND B, LATIN MUSIC, AND DRIVING HOUSE MUSIC. SOUND IS ARCHITECTURE. ENGINEERING IS THE SCIENCE OF EMOTION. HE DOESN'T JUST RECORD MUSIC. HE ENGINEERS THE FUTURE. STAY TUNED.";
       
       const utterance = new SpeechSynthesisUtterance(textToRead);
+      utteranceRef.current = utterance; // Store ref so event listener isn't lost
       
       // Make it sound slightly robotic/mechanical
       utterance.pitch = 0.6;
       utterance.rate = 0.9;
       
-      // Attempt to find an English robotic/synthetic voice if available
       const voices = window.speechSynthesis.getVoices();
       const syntheticVoice = voices.find(v => v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('google') || v.lang === 'en-US');
       if (syntheticVoice) {
         utterance.voice = syntheticVoice;
       }
 
+      // Trigger "NO SIGNAL" sequence when voice stops
+      utterance.onend = () => {
+        setBootStage('nosignal');
+        // Smoothly fade out the white noise audio
+        if (gainNodeRef.current && audioContextRef.current) {
+           gainNodeRef.current.gain.setValueAtTime(gainNodeRef.current.gain.value, audioContextRef.current.currentTime);
+           gainNodeRef.current.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + 0.3);
+        }
+      };
+
       window.speechSynthesis.speak(utterance);
-    }, 850);
+    }, 3000);
   };
 
   return (
@@ -139,7 +167,6 @@ export default function App() {
           .vcr-font {
             font-family: 'VT323', monospace;
             color: #fff;
-            /* Scaled down for paragraph readability */
             font-size: 1.8rem;
             letter-spacing: 0.1em;
             line-height: 1.4;
@@ -148,8 +175,8 @@ export default function App() {
                2px -2px 0 #000,
               -2px  2px 0 #000,
                2px  2px 0 #000,
-               -4px 0 2px rgba(255, 0, 80, 0.6), /* Magenta aberration */
-               4px 0 2px rgba(0, 255, 255, 0.6), /* Cyan aberration */
+               -4px 0 2px rgba(255, 0, 80, 0.6),
+               4px 0 2px rgba(0, 255, 255, 0.6),
                0 0 25px rgba(255,255,255,0.9),
                0 0 45px rgba(255,255,255,0.7),
                0 0 70px rgba(255,255,255,0.4);
@@ -162,7 +189,6 @@ export default function App() {
             }
           }
 
-          /* Faster, more chaotic snapping for the RGB artifacts */
           @keyframes artifact-hop {
             0%   { background-position: 0% 0%; }
             10%  { background-position: 15% -10%; }
@@ -184,7 +210,7 @@ export default function App() {
           }
 
           .animate-scroll {
-            /* 30 seconds for a smooth, readable broadcast crawl */
+            /* Smooth 35s vertical scroll */
             animation: broadcast-scroll 35s linear infinite forwards;
           }
 
@@ -222,17 +248,16 @@ export default function App() {
             filter: blur(1.2px) contrast(115%) brightness(1.15);
           }
 
+          /* Video handles both 16:9 and 4:3 stretching seamlessly with object-fit cover */
           .noise-video {
             position: absolute;
             inset: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
-            /* Balanced to let the glitchy SMPTE color bars show clearly */
             filter: contrast(130%) brightness(1.1) saturate(120%);
           }
 
-          /* Full-width RGB Artifacts Overlay */
           .rgb-artifacts-full {
             position: absolute;
             inset: -20%;
@@ -249,7 +274,6 @@ export default function App() {
             z-index: 54;
           }
           
-          /* Warning Screen Styles */
           .blink-text {
             animation: blink 1s step-end infinite;
           }
@@ -284,10 +308,10 @@ export default function App() {
         {/* Main TV Frame */}
         <div className="relative w-full h-full bg-[#111] rounded-[40px] md:rounded-[80px] overflow-hidden flex items-center justify-center global-bloom-wrap shadow-[0_0_150px_rgba(0,0,0,1)] ring-[24px] ring-[#0a0a0a]">
           
-          {/* 1. VIDEO BACKGROUND (noise.mp4) */}
+          {/* 1. VIDEO BACKGROUND (Switches to static.mp4 when TTS finishes) */}
           <video
             ref={videoRef}
-            src="/noise.mp4"
+            src={bootStage === 'nosignal' ? "/static.mp4" : "/noise.mp4"}
             className="noise-video z-0 opacity-85"
             loop
             muted
@@ -297,34 +321,46 @@ export default function App() {
           {/* 2. FULL-WIDTH RGB ARTIFACTS OVERLAY */}
           <div className="rgb-artifacts-full"></div>
 
-          {/* 3. MAIN CONTENT (SCROLLING TEXT) */}
-          <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
-            <div className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
-              
-              <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
-              
-              <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
-              
-              <p>A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
-              
-              <p>ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R&B, LATIN MUSIC, AND DRIVING HOUSE MUSIC.</p>
-              
-              <p>SOUND IS ARCHITECTURE.<br/>ENGINEERING IS THE SCIENCE OF EMOTION.</p>
-              
-              <p>HE DOESN'T JUST RECORD MUSIC.<br/>HE ENGINEERS THE FUTURE.</p>
-              
-              <p className="text-4xl md:text-6xl mt-8">STAY TUNED...</p>
-
+          {/* 3. MUTE ICON (Displays during No Signal) */}
+          {bootStage === 'nosignal' && (
+            <div className="absolute top-6 left-8 md:top-10 md:left-12 z-[70] vcr-font text-[#0f0] text-4xl md:text-6xl blink-text !text-shadow-none pointer-events-none" style={{textShadow: '0 0 10px #0f0'}}>
+              MUTE
             </div>
-          </div>
+          )}
 
-          {/* 4. BLOOM ENGINE (Luminous glow bleed) */}
+          {/* 4. MAIN CONTENT (SCROLLING TEXT OR NO SIGNAL) */}
+          {bootStage === 'nosignal' ? (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+              <a 
+                href="https://djmerkone.com" 
+                className="vcr-font text-6xl md:text-8xl hover:text-red-500 transition-colors duration-200 cursor-pointer"
+              >
+                NO SIGNAL
+              </a>
+            </div>
+          ) : (
+            <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
+              <div className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
+                
+                <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
+                <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
+                <p>A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
+                <p>ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R&B, LATIN MUSIC, AND DRIVING HOUSE MUSIC.</p>
+                <p>SOUND IS ARCHITECTURE.<br/>ENGINEERING IS THE SCIENCE OF EMOTION.</p>
+                <p>HE DOESN'T JUST RECORD MUSIC.<br/>HE ENGINEERS THE FUTURE.</p>
+                <p className="text-4xl md:text-6xl mt-8">STAY TUNED...</p>
+
+              </div>
+            </div>
+          )}
+
+          {/* 5. BLOOM ENGINE (Luminous glow bleed) */}
           <div className="heavy-bloom"></div>
 
-          {/* 5. SCANLINES & CRT ARTIFACTS */}
+          {/* 6. SCANLINES & CRT ARTIFACTS */}
           <div className="scanlines-overlay"></div>
           
-          {/* 6. VIGNETTE & TUBE DEPTH */}
+          {/* 7. VIGNETTE & TUBE DEPTH */}
           <div className="crt-vignette-bezel"></div>
 
           {/* --- TV POWER ON SEQUENCE --- */}
