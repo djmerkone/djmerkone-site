@@ -13,7 +13,8 @@ const buildTracks = async (actx) => {
   const sr = actx.sampleRate;
   const WAudioContext = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   
-  // Track 1: Start Screen (8s loop) - Arpeggiated Space Synth
+  // ---------------- GALAGA TRACKS ----------------
+  // Track 1: Galaga Start (8s loop)
   const o1 = new WAudioContext(1, 8 * sr, sr);
   for(let i=0; i<32; i++) {
     let t = i * 0.25;
@@ -23,13 +24,11 @@ const buildTracks = async (actx) => {
     osc.connect(gain).connect(o1.destination);
     osc.start(t); osc.stop(t+0.2);
   }
-  const startBuf = await o1.startRendering();
+  const galagaStartBuf = await o1.startRendering();
 
-  // Track 2: Playing (64s loop = 32 bars at 120bpm) - NES Style Multi-Layer Synth
+  // Track 2: Galaga Playing (64s loop = 32 bars at 120bpm)
   const o2 = new WAudioContext(1, 64 * sr, sr);
-  
-  // 4 Progression Sections (8 bars / 32 beats each)
-  const sections = [
+  const galagaSections = [
     { bass: 32.70, pad: [130.81, 155.56, 196.00], arp: [261.63, 311.13, 392.00, 523.25] }, // Cm
     { bass: 25.96, pad: [103.83, 130.81, 155.56], arp: [207.65, 261.63, 311.13, 415.30] }, // Ab
     { bass: 43.65, pad: [87.31,  103.83, 130.81], arp: [174.61, 207.65, 261.63, 349.23] }, // Fm
@@ -39,47 +38,40 @@ const buildTracks = async (actx) => {
   for(let beat=0; beat<128; beat++) {
     let t = beat * 0.5;
     let sectionIdx = Math.floor(beat / 32);
-    let sec = sections[sectionIdx];
+    let sec = galagaSections[sectionIdx];
 
-    // Kick Drum (every beat)
     let k = o2.createOscillator(); k.type = 'square';
     k.frequency.setValueAtTime(100, t); k.frequency.exponentialRampToValueAtTime(10, t+0.1);
     let kg = o2.createGain(); kg.gain.setValueAtTime(0.4, t); kg.gain.linearRampToValueAtTime(0.01, t+0.1);
     k.connect(kg).connect(o2.destination); k.start(t); k.stop(t+0.1);
 
-    // Sine Pad (chords change every bar/4 beats)
     if (beat % 4 === 0) {
       sec.pad.forEach(freq => {
         let p = o2.createOscillator(); p.type = 'sine';
         p.frequency.value = freq;
         let pg = o2.createGain(); 
         pg.gain.setValueAtTime(0, t); 
-        pg.gain.linearRampToValueAtTime(0.05, t + 0.5); // Fade in
+        pg.gain.linearRampToValueAtTime(0.05, t + 0.5); 
         pg.gain.setValueAtTime(0.05, t + 1.5);
-        pg.gain.linearRampToValueAtTime(0, t + 2.0); // Fade out
+        pg.gain.linearRampToValueAtTime(0, t + 2.0); 
         p.connect(pg).connect(o2.destination); p.start(t); p.stop(t+2.0);
       });
     }
 
-    // Driving 16th Note Triangle Bassline (NES classic)
     for(let step=0; step<4; step++) {
       let bt = t + step * 0.125;
       let b = o2.createOscillator(); b.type = 'triangle';
       let freq = sec.bass; 
-      if (step === 2 && beat % 2 === 0) freq *= 2; // Octave pop on specific offbeats
+      if (step === 2 && beat % 2 === 0) freq *= 2; 
       b.frequency.value = freq;
       let bg = o2.createGain(); bg.gain.setValueAtTime(0.18, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.1);
       b.connect(bg).connect(o2.destination); b.start(bt); b.stop(bt+0.1);
     }
 
-    // Sawtooth Arpeggio Melody (8th notes)
     for(let step=0; step<2; step++) {
       let bt = t + step * 0.25;
       let m = o2.createOscillator(); m.type = 'sawtooth';
-      
-      // Vary the arp direction based on the section
       let arpIdx = (sectionIdx % 2 === 0) ? ((beat * 2 + step) % 4) : (3 - ((beat * 2 + step) % 4));
-      
       m.frequency.value = sec.arp[arpIdx];
       let mg = o2.createGain(); 
       mg.gain.setValueAtTime(0.04, bt); 
@@ -87,9 +79,9 @@ const buildTracks = async (actx) => {
       m.connect(mg).connect(o2.destination); m.start(bt); m.stop(bt+0.2);
     }
   }
-  const playBuf = await o2.startRendering();
+  const galagaPlayBuf = await o2.startRendering();
 
-  // Track 3: Game Over (4s one-shot) - Dramatic descending chord
+  // Track 3: Galaga Game Over (4s one-shot)
   const o3 = new WAudioContext(1, 4 * sr, sr);
   for(let i=0; i<8; i++) {
     let t = i * 0.3;
@@ -99,21 +91,465 @@ const buildTracks = async (actx) => {
     osc.connect(gain).connect(o3.destination);
     osc.start(t); osc.stop(t+0.4);
   }
-  const overBuf = await o3.startRendering();
+  const galagaOverBuf = await o3.startRendering();
 
-  return { start: startBuf, play: playBuf, over: overBuf };
+  // ---------------- COMMANDO TRACKS ----------------
+  
+  // Create a reusable noise buffer for snare drums
+  const noiseBuf = actx.createBuffer(1, sr * 0.5, sr);
+  const nData = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
+
+  const playSnare = (ctx, time, dest) => {
+    let nSrc = ctx.createBufferSource();
+    nSrc.buffer = noiseBuf;
+    let nFilter = ctx.createBiquadFilter();
+    nFilter.type = 'bandpass';
+    nFilter.frequency.value = 1500;
+    let nGain = ctx.createGain();
+    nGain.gain.setValueAtTime(0.3, time);
+    nGain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+    nSrc.connect(nFilter).connect(nGain).connect(dest);
+    nSrc.start(time); nSrc.stop(time + 0.15);
+  };
+
+  // Track 4: Commando Start (8s loop) - Military Snare/Alert
+  const c1 = new WAudioContext(1, 8 * sr, sr);
+  for(let i=0; i<16; i++) {
+    let t = i * 0.5;
+    // Alarm pulse
+    let a = c1.createOscillator(); a.type = 'square';
+    a.frequency.setValueAtTime(i%2===0 ? 440 : 330, t);
+    let ag = c1.createGain(); ag.gain.setValueAtTime(0.05, t); ag.gain.linearRampToValueAtTime(0.01, t+0.4);
+    a.connect(ag).connect(c1.destination); a.start(t); a.stop(t+0.4);
+    // Marching snare
+    playSnare(c1, t, c1.destination);
+    if (i%4===3) {
+       playSnare(c1, t+0.25, c1.destination);
+       playSnare(c1, t+0.375, c1.destination);
+    }
+  }
+  const commandoStartBuf = await c1.startRendering();
+
+  // Track 5: Commando Playing (64s loop = 32 bars at 120bpm) - Dramatic March
+  const c2 = new WAudioContext(1, 64 * sr, sr);
+  const cmdSections = [
+    { root: 65.41, chords: [130.81, 155.56, 196.00] }, // Cm
+    { root: 65.41, chords: [130.81, 155.56, 196.00] }, // Cm
+    { root: 51.91, chords: [103.83, 130.81, 155.56] }, // Ab
+    { root: 58.27, chords: [116.54, 146.83, 174.61] }  // Bb
+  ];
+
+  for(let beat=0; beat<128; beat++) {
+    let t = beat * 0.5;
+    let sectionIdx = Math.floor(beat / 32);
+    let sec = cmdSections[sectionIdx];
+
+    // Marching Bass (Triangle)
+    const marchPattern = [1, 0, 0, 1, 1, 0, 1, 0]; // 8th notes pattern
+    for(let step=0; step<2; step++) {
+      let bt = t + step * 0.25;
+      let patIdx = (beat * 2 + step) % 8;
+      if (marchPattern[patIdx] === 1) {
+        let b = c2.createOscillator(); b.type = 'triangle';
+        b.frequency.value = sec.root;
+        let bg = c2.createGain(); bg.gain.setValueAtTime(0.25, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.2);
+        b.connect(bg).connect(c2.destination); b.start(bt); b.stop(bt+0.2);
+      }
+    }
+
+    // Dramatic Stabs (Sawtooth) on beats 1 and 3
+    if (beat % 2 === 0) {
+      sec.chords.forEach(freq => {
+        let p = c2.createOscillator(); p.type = 'sawtooth';
+        p.frequency.value = freq;
+        let pg = c2.createGain(); 
+        pg.gain.setValueAtTime(0.08, t); 
+        pg.gain.exponentialRampToValueAtTime(0.01, t + 0.4); 
+        p.connect(pg).connect(c2.destination); p.start(t); p.stop(t+0.4);
+      });
+      playSnare(c2, t, c2.destination);
+    }
+  }
+  const commandoPlayBuf = await c2.startRendering();
+
+  // Track 6: Commando Game Over (4s one-shot) - Taps bugle simulation
+  const c3 = new WAudioContext(1, 4 * sr, sr);
+  const taps = [
+    { f: 261.63, d: 0.4, s: 0 },   // C4
+    { f: 349.23, d: 0.4, s: 0.5 }, // F4
+    { f: 440.00, d: 0.8, s: 1.0 }, // A4
+    { f: 261.63, d: 0.4, s: 2.0 }, // C4
+    { f: 349.23, d: 0.4, s: 2.5 }, // F4
+    { f: 440.00, d: 1.0, s: 3.0 }  // A4
+  ];
+  taps.forEach(note => {
+    let osc = c3.createOscillator(); osc.type = 'square';
+    osc.frequency.value = note.f;
+    let gain = c3.createGain(); 
+    gain.gain.setValueAtTime(0, note.s);
+    gain.gain.linearRampToValueAtTime(0.1, note.s + 0.05);
+    gain.gain.linearRampToValueAtTime(0.01, note.s + note.d - 0.05);
+    osc.connect(gain).connect(c3.destination);
+    osc.start(note.s); osc.stop(note.s + note.d);
+  });
+  const commandoOverBuf = await c3.startRendering();
+
+  return { 
+    galagaStart: galagaStartBuf, galagaPlay: galagaPlayBuf, galagaOver: galagaOverBuf,
+    commandoStart: commandoStartBuf, commandoPlay: commandoPlayBuf, commandoOver: commandoOverBuf
+  };
+};
+
+// --- HELPER CRT TEXT DRAWING ---
+const drawCRTText = (ctx, text, x, y, color, font, align = 'center') => {
+  ctx.font = font; ctx.textAlign = align;
+  ctx.fillStyle = 'rgba(255, 0, 255, 0.5)'; ctx.shadowBlur = 0; ctx.fillText(text, x - 1, y);
+  ctx.fillStyle = 'rgba(0, 255, 255, 0.5)'; ctx.fillText(text, x + 1, y);
+  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 12; ctx.fillText(text, x, y);
+  ctx.shadowBlur = 0;
+};
+
+// --- MENU COMPONENT ---
+const GameMenu = ({ onSelect }) => {
+  const canvasRef = useRef(null);
+  const selectedIndex = useRef(0);
+
+  useEffect(() => {
+    const handleKeyDown = e => {
+      if (e.key === 'ArrowUp') selectedIndex.current = 0;
+      if (e.key === 'ArrowDown') selectedIndex.current = 1;
+      if (e.key === 'Enter') {
+        onSelect(selectedIndex.current === 0 ? 'galaga' : 'commando');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSelect]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawCRTText(ctx, "SELECT SYSTEM", 400, 150, '#fff', '60px "VT323", monospace');
+      
+      const opt1Color = selectedIndex.current === 0 ? '#0f0' : '#555';
+      drawCRTText(ctx, "> BASS SPACE ADVENTURES", 400, 300, opt1Color, '40px "VT323", monospace');
+      
+      const opt2Color = selectedIndex.current === 1 ? '#0ff' : '#555';
+      drawCRTText(ctx, "> BASS COMMANDO", 400, 380, opt2Color, '40px "VT323", monospace');
+
+      if (Math.floor(Date.now() / 500) % 2 === 0) {
+        drawCRTText(ctx, "PRESS ENTER", 400, 500, '#fff', '24px "VT323", monospace');
+      }
+    };
+
+    const loop = () => {
+      draw();
+      animationFrameId = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+    </div>
+  );
+};
+
+
+// --- BASS COMMANDO GAME COMPONENT ---
+const CommandoGame = ({ audioCtx }) => {
+  const canvasRef = useRef(null);
+  
+  const state = useRef({
+    status: 'start', 
+    score: 0,
+    highScore: 0,
+    wave: 1,
+    cities: [100, 220, 340, 460, 580, 700].map(x => ({ x, y: 550, alive: true })),
+    crosshair: { x: 400, y: 300, speed: 8 },
+    incoming: [],
+    outgoing: [],
+    explosions: [],
+    lastShot: 0
+  });
+
+  const keys = useRef({});
+
+  useEffect(() => {
+    const handleKeyDown = e => { keys.current[e.key] = true; };
+    const handleKeyUp = e => { keys.current[e.key] = false; };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const playAudio = (type) => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      if (type === 'launch') {
+        let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, t0); osc.frequency.exponentialRampToValueAtTime(100, t0+0.3);
+        let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.3);
+        osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+0.3);
+      } else if (type === 'boom') {
+        let bufSize = audioCtx.sampleRate * 0.4;
+        let buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+        let data = buf.getChannelData(0);
+        for(let i=0; i<bufSize; i++) data[i] = Math.random()*2-1;
+        let noise = audioCtx.createBufferSource(); noise.buffer = buf;
+        let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.3, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.4);
+        noise.connect(gain).connect(audioCtx.destination); noise.start(t0);
+      }
+    };
+
+    const spawnWave = (wave) => {
+      let count = 5 + wave * 3;
+      let inc = [];
+      for(let i=0; i<count; i++) {
+        let sx = Math.random() * 800;
+        let tx = Math.random() * 800;
+        // Bias towards alive cities
+        let aliveCities = state.current.cities.filter(c => c.alive);
+        if (aliveCities.length > 0 && Math.random() > 0.3) {
+          tx = aliveCities[Math.floor(Math.random() * aliveCities.length)].x + 20;
+        }
+        inc.push({
+          sx, sy: 0, tx, ty: 550, x: sx, y: 0,
+          speed: 0.002 + (Math.random() * 0.002) + (wave * 0.0005),
+          progress: -(Math.random() * 2) // staggered spawn
+        });
+      }
+      return inc;
+    };
+
+    const formatScore = (s) => String(s).padStart(6, '0');
+
+    const draw = () => {
+      let gs = state.current;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (gs.status === 'start') {
+        drawCRTText(ctx, "BASS COMMANDO", 400, 250, '#0ff', '60px "VT323", monospace');
+        drawCRTText("DEFEND THE SECTOR", 400, 300, '#fff', '30px "VT323", monospace');
+        drawCRTText("PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
+        return;
+      }
+
+      // Draw Cities
+      gs.cities.forEach(c => {
+        if (c.alive) {
+          ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+          ctx.fillRect(c.x, c.y, 40, 20);
+          ctx.fillRect(c.x + 10, c.y - 10, 20, 10);
+        } else {
+          ctx.fillStyle = '#333'; ctx.shadowBlur = 0;
+          ctx.fillRect(c.x, c.y + 10, 40, 10);
+        }
+      });
+      ctx.shadowBlur = 0;
+
+      // Draw Crosshair
+      ctx.strokeStyle = '#0f0'; ctx.lineWidth = 2; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(gs.crosshair.x - 10, gs.crosshair.y); ctx.lineTo(gs.crosshair.x + 10, gs.crosshair.y);
+      ctx.moveTo(gs.crosshair.x, gs.crosshair.y - 10); ctx.lineTo(gs.crosshair.x, gs.crosshair.y + 10);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Incoming Missiles
+      ctx.strokeStyle = '#f0f'; ctx.lineWidth = 2; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 8;
+      gs.incoming.forEach(m => {
+        if (m.progress > 0) {
+          ctx.beginPath(); ctx.moveTo(m.sx, m.sy); ctx.lineTo(m.x, m.y); ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.fillRect(m.x - 2, m.y - 2, 4, 4);
+        }
+      });
+      ctx.shadowBlur = 0;
+
+      // Outgoing Missiles
+      ctx.strokeStyle = '#ff0'; ctx.lineWidth = 2; ctx.shadowColor = '#ff0'; ctx.shadowBlur = 8;
+      gs.outgoing.forEach(m => {
+        ctx.beginPath(); ctx.moveTo(m.sx, m.sy); ctx.lineTo(m.x, m.y); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.fillRect(m.x - 2, m.y - 2, 4, 4);
+      });
+      ctx.shadowBlur = 0;
+
+      // Explosions
+      gs.explosions.forEach(exp => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${exp.life / 60})`;
+        ctx.shadowColor = '#0ff'; ctx.shadowBlur = 20;
+        ctx.beginPath(); ctx.arc(exp.x, exp.y, exp.r, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+
+      // UI
+      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(ctx, `WAVE: ${gs.wave}`, 400, 30, '#fff', '24px "VT323", monospace');
+      
+      if (gs.status === 'gameover') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
+        drawCRTText(ctx, "SYSTEM FAILURE", 400, 280, '#f00', '80px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+      }
+
+      if (gs.status === 'levelcleared') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
+        drawCRTText(ctx, `SECTOR ${gs.wave} SECURED`, 400, 280, '#0ff', '60px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO CONTINUE", 400, 350, '#fff', '30px "VT323", monospace');
+      }
+    };
+
+    const update = () => {
+      let gs = state.current;
+
+      if (gs.status === 'start' && keys.current['Enter']) {
+        gs.incoming = spawnWave(1);
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
+      }
+      if (gs.status === 'gameover' && keys.current['Enter']) {
+        gs.score = 0; gs.wave = 1;
+        gs.cities.forEach(c => c.alive = true);
+        gs.incoming = spawnWave(1); gs.outgoing = []; gs.explosions = [];
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
+      }
+      if (gs.status === 'levelcleared' && keys.current['Enter']) {
+        gs.wave++;
+        gs.incoming = spawnWave(gs.wave); gs.outgoing = []; gs.explosions = [];
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
+      }
+
+      if (gs.status !== 'playing') return;
+
+      // Crosshair
+      if (keys.current['ArrowLeft'] || keys.current['a']) gs.crosshair.x -= gs.crosshair.speed;
+      if (keys.current['ArrowRight'] || keys.current['d']) gs.crosshair.x += gs.crosshair.speed;
+      if (keys.current['ArrowUp'] || keys.current['w']) gs.crosshair.y -= gs.crosshair.speed;
+      if (keys.current['ArrowDown'] || keys.current['s']) gs.crosshair.y += gs.crosshair.speed;
+      gs.crosshair.x = Math.max(0, Math.min(800, gs.crosshair.x));
+      gs.crosshair.y = Math.max(0, Math.min(520, gs.crosshair.y));
+
+      // Shoot
+      if (keys.current[' '] && Date.now() - gs.lastShot > 300) {
+        gs.outgoing.push({
+          sx: 400, sy: 580, tx: gs.crosshair.x, ty: gs.crosshair.y,
+          x: 400, y: 580, progress: 0, speed: 0.05
+        });
+        gs.lastShot = Date.now();
+        playAudio('launch');
+      }
+
+      // Outgoing
+      for (let i = gs.outgoing.length - 1; i >= 0; i--) {
+        let m = gs.outgoing[i];
+        m.progress += m.speed;
+        m.x = m.sx + (m.tx - m.sx) * m.progress;
+        m.y = m.sy + (m.ty - m.sy) * m.progress;
+        if (m.progress >= 1) {
+          gs.explosions.push({ x: m.tx, y: m.ty, r: 0, maxR: 45, life: 60 });
+          gs.outgoing.splice(i, 1);
+          playAudio('boom');
+        }
+      }
+
+      // Explosions
+      for (let i = gs.explosions.length - 1; i >= 0; i--) {
+        let exp = gs.explosions[i];
+        if (exp.life > 30) exp.r += (exp.maxR - exp.r) * 0.1;
+        exp.life--;
+        if (exp.life <= 0) gs.explosions.splice(i, 1);
+      }
+
+      // Incoming
+      let hitBottomCount = 0;
+      for (let i = gs.incoming.length - 1; i >= 0; i--) {
+        let m = gs.incoming[i];
+        m.progress += m.speed;
+        if (m.progress > 0) {
+          m.x = m.sx + (m.tx - m.sx) * m.progress;
+          m.y = m.sy + (m.ty - m.sy) * m.progress;
+          
+          // Collision with explosions
+          let destroyed = false;
+          for (let j = 0; j < gs.explosions.length; j++) {
+            let exp = gs.explosions[j];
+            let dist = Math.hypot(m.x - exp.x, m.y - exp.y);
+            if (dist < exp.r) {
+              destroyed = true; gs.score += 100;
+              gs.explosions.push({ x: m.x, y: m.y, r: 0, maxR: 20, life: 30 });
+              playAudio('boom');
+              break;
+            }
+          }
+
+          if (destroyed) { gs.incoming.splice(i, 1); continue; }
+
+          if (m.progress >= 1) {
+            gs.explosions.push({ x: m.x, y: m.y, r: 0, maxR: 30, life: 40 });
+            playAudio('boom');
+            gs.cities.forEach(c => {
+              if (c.alive && Math.abs(c.x + 20 - m.x) < 30) c.alive = false;
+            });
+            gs.incoming.splice(i, 1);
+          }
+        }
+      }
+
+      let aliveCities = gs.cities.filter(c => c.alive).length;
+      if (aliveCities === 0 && gs.status !== 'gameover') {
+        gs.status = 'gameover';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoOver' }));
+      } else if (gs.incoming.length === 0 && gs.status !== 'levelcleared') {
+        gs.status = 'levelcleared';
+        gs.score += aliveCities * 500;
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); // stop music
+      }
+    };
+
+    const loop = () => {
+      update(); draw();
+      animationFrameId = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [audioCtx]);
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+    </div>
+  );
 };
 
 // --- SECRET GALAGA-STYLE GAME COMPONENT ---
 const GalagaGame = ({ audioCtx }) => {
   const canvasRef = useRef(null);
   
-  // Store audio buffers and currently playing node
-  const bgmBuffers = useRef({});
-  const bgmNode = useRef(null);
-  const playTrackRef = useRef(() => {});
-
-  // Internal game state
+  // Internal game state stored in ref to avoid react re-renders
   const state = useRef({
     status: 'start', // 'start', 'playing', 'respawning', 'levelcleared', 'gameover'
     respawnTimer: 0,
@@ -159,17 +595,6 @@ const GalagaGame = ({ audioCtx }) => {
     };
   }, []);
 
-  // Initialize Music
-  useEffect(() => {
-    if (audioCtx) {
-      buildTracks(audioCtx).then(bufs => {
-        bgmBuffers.current = bufs;
-        playTrackRef.current('start');
-      });
-    }
-    return () => { if (bgmNode.current) { try{ bgmNode.current.stop(); }catch(e){} } };
-  }, [audioCtx]);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -180,17 +605,6 @@ const GalagaGame = ({ audioCtx }) => {
     const imgEnemy1 = new Image(); imgEnemy1.src = ASSETS.enemy1;
     const imgEnemy2 = new Image(); imgEnemy2.src = ASSETS.enemy2;
     const enemyImgs = [imgEnemy0, imgEnemy1, imgEnemy2];
-
-    playTrackRef.current = (trackName) => {
-      if (bgmNode.current) { try { bgmNode.current.stop(); } catch(e){} }
-      if (!bgmBuffers.current[trackName] || !audioCtx || audioCtx.state !== 'running') return;
-      const src = audioCtx.createBufferSource();
-      src.buffer = bgmBuffers.current[trackName];
-      if (trackName !== 'over') src.loop = true;
-      src.connect(audioCtx.destination);
-      src.start();
-      bgmNode.current = src;
-    };
 
     // --- 8-Bit Audio Generators ---
     const playShoot = () => {
@@ -232,22 +646,6 @@ const GalagaGame = ({ audioCtx }) => {
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
       noise.connect(gain).connect(audioCtx.destination);
       noise.start();
-    };
-
-    const playLevelClear = () => {
-      if (!audioCtx || audioCtx.state !== 'running') return;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'square';
-      const now = audioCtx.currentTime;
-      osc.frequency.setValueAtTime(440, now);
-      osc.frequency.setValueAtTime(554.37, now + 0.1);
-      osc.frequency.setValueAtTime(659.25, now + 0.2);
-      osc.frequency.setValueAtTime(880, now + 0.3);
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.linearRampToValueAtTime(0, now + 0.6);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start(); osc.stop(now + 0.6);
     };
 
     const spawnWave = (waveNum) => {
@@ -313,7 +711,7 @@ const GalagaGame = ({ audioCtx }) => {
       
       if (gs.lives <= 0) {
         gs.status = 'gameover';
-        playTrackRef.current('over');
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaOver' }));
       } else {
         gs.status = 'respawning';
         gs.respawnTimer = 120; // Approx 2 seconds
@@ -322,18 +720,9 @@ const GalagaGame = ({ audioCtx }) => {
 
     const formatScore = (s) => String(s).padStart(6, '0');
 
-    const drawCRTText = (text, x, y, color, font, align = 'center') => {
-      ctx.font = font; ctx.textAlign = align;
-      ctx.fillStyle = 'rgba(255, 0, 255, 0.5)'; ctx.shadowBlur = 0; ctx.fillText(text, x - 1, y);
-      ctx.fillStyle = 'rgba(0, 255, 255, 0.5)'; ctx.fillText(text, x + 1, y);
-      ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 12; ctx.fillText(text, x, y);
-      ctx.shadowBlur = 0;
-    };
-
     const draw = () => {
       let gs = state.current;
       
-      // Clear screen with a subtle dark tint so the background video shows through nicely
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -348,14 +737,13 @@ const GalagaGame = ({ audioCtx }) => {
       ctx.shadowBlur = 0;
 
       if (gs.status === 'start') {
-        drawCRTText("BASS SPACE ADVENTURES", 400, 250, '#0f0', '60px "VT323", monospace');
-        drawCRTText("CHRONICLES OF CAPTAIN MERK", 400, 300, '#fff', '30px "VT323", monospace');
-        drawCRTText("PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
-        drawCRTText("ARROWS: Move  |  SPACE: Shoot", 400, 420, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "BASS SPACE ADVENTURES", 400, 250, '#0f0', '60px "VT323", monospace');
+        drawCRTText(ctx, "CHRONICLES OF CAPTAIN MERK", 400, 300, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "ARROWS: Move  |  SPACE: Shoot", 400, 420, '#fff', '20px "VT323", monospace');
         return;
       }
 
-      // Draw Player (flashing if respawning)
       if (gs.status === 'playing' || (gs.status === 'respawning' && Math.floor(gs.respawnTimer / 5) % 2 === 0)) {
         ctx.shadowColor = '#fff';
         ctx.shadowBlur = 12;
@@ -384,7 +772,6 @@ const GalagaGame = ({ audioCtx }) => {
       });
       ctx.shadowBlur = 0;
 
-      // Pulsing player bullets
       let pulse = Math.abs(Math.sin(Date.now() * 0.02)) * 4;
       ctx.fillStyle = '#0ff'; 
       ctx.shadowColor = '#0ff';
@@ -406,9 +793,9 @@ const GalagaGame = ({ audioCtx }) => {
       });
       ctx.shadowBlur = 0;
 
-      drawCRTText(`SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
-      drawCRTText(`HI-SCORE: ${formatScore(gs.highScore)}`, 400, 30, '#fff', '24px "VT323", monospace');
-      drawCRTText(`LIVES:`, 680, 30, '#fff', '24px "VT323", monospace', 'right');
+      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 30, '#fff', '24px "VT323", monospace');
+      drawCRTText(ctx, `LIVES:`, 680, 30, '#fff', '24px "VT323", monospace', 'right');
       
       ctx.shadowColor = '#fff'; ctx.shadowBlur = 10;
       for(let i=0; i<gs.lives; i++) {
@@ -423,14 +810,14 @@ const GalagaGame = ({ audioCtx }) => {
 
       if (gs.status === 'gameover') {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        drawCRTText("GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
-        drawCRTText("PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
       }
 
       if (gs.status === 'levelcleared') {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(`WAVE ${gs.wave} CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
-        drawCRTText("PRESS ENTER TO CONTINUE", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, `WAVE ${gs.wave} CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO CONTINUE", 400, 350, '#fff', '30px "VT323", monospace');
       }
     };
 
@@ -445,7 +832,7 @@ const GalagaGame = ({ audioCtx }) => {
       if (gs.status === 'start') {
         if (keys.current['Enter']) { 
           gs.status = 'playing'; 
-          playTrackRef.current('play');
+          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
         }
         return;
       }
@@ -456,7 +843,7 @@ const GalagaGame = ({ audioCtx }) => {
           gs.enemies = spawnWave(gs.wave);
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
           gs.status = 'playing';
-          playTrackRef.current('play');
+          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
         }
         return;
       }
@@ -468,12 +855,11 @@ const GalagaGame = ({ audioCtx }) => {
           gs.enemies = spawnWave(gs.wave);
           gs.player.x = 388;
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
-          playTrackRef.current('play');
+          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
         }
         return;
       }
 
-      // If Respawning, lock player controls and countdown
       if (gs.status === 'respawning') {
         gs.respawnTimer--;
         if (gs.respawnTimer <= 0) {
@@ -493,7 +879,6 @@ const GalagaGame = ({ audioCtx }) => {
           playShoot();
         }
 
-        // Player Bullets
         for (let i = gs.bullets.length - 1; i >= 0; i--) {
           let b = gs.bullets[i];
           b.y += b.vy;
@@ -519,13 +904,11 @@ const GalagaGame = ({ audioCtx }) => {
         }
       }
 
-      // Enemy Bullets
       for (let i = gs.enemyBullets.length - 1; i >= 0; i--) {
         let eb = gs.enemyBullets[i];
         eb.x += eb.vx; eb.y += eb.vy;
         if (eb.y > 600 || eb.x < 0 || eb.x > 800) { gs.enemyBullets.splice(i, 1); continue; }
         
-        // Only hit player if actively playing (not respawning)
         if (gs.status === 'playing') {
           if (eb.x < gs.player.x + gs.player.w && eb.x + eb.w > gs.player.x &&
               eb.y < gs.player.y + gs.player.h && eb.y + eb.h > gs.player.y) {
@@ -536,7 +919,6 @@ const GalagaGame = ({ audioCtx }) => {
         }
       }
 
-      // Enemy Logic (continues even during respawn)
       let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 60)); 
       
       if (Math.random() < 0.015 + (gs.wave * 0.002)) {
@@ -583,7 +965,6 @@ const GalagaGame = ({ audioCtx }) => {
           }
         }
 
-        // Ramming player
         if (gs.status === 'playing') {
           if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
               e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
@@ -601,14 +982,12 @@ const GalagaGame = ({ audioCtx }) => {
 
       if (gs.enemies.length === 0 && gs.status !== 'gameover' && gs.status !== 'levelcleared') {
         gs.status = 'levelcleared';
-        if (bgmNode.current) { try{bgmNode.current.stop();}catch(e){} }
-        playLevelClear();
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); // Handled gracefully via event
       }
     };
 
     const loop = () => {
-      update();
-      draw();
+      update(); draw();
       animationFrameId = requestAnimationFrame(loop);
     };
     loop();
@@ -616,16 +995,9 @@ const GalagaGame = ({ audioCtx }) => {
     return () => cancelAnimationFrame(animationFrameId);
   }, [audioCtx]);
 
-  // Make the wrapper transparent to let game.mp4 bleed through. 
-  // Keep z-10 so the video (z-15 with mix-blend-screen) renders OVER the game!
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
-      <canvas 
-        ref={canvasRef} 
-        width={800} 
-        height={600} 
-        className="w-full h-full object-fill bg-transparent"
-      />
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
     </div>
   );
 };
@@ -633,9 +1005,8 @@ const GalagaGame = ({ audioCtx }) => {
 
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
-  // Stages: 'off', 'tv-on-flash', 'booting', 'on', 'nosignal', 'tv-off-anim', 'permanently-off', 'final-tv-on-flash', 'final-screen'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
-  const [isSecretGame, setIsSecretGame] = useState(false);
+  const [secretGameState, setSecretGameState] = useState('none'); // 'none', 'menu', 'galaga', 'commando'
   
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -643,6 +1014,9 @@ export default function App() {
   const timeoutsRef = useRef([]); 
   const activeNodesRef = useRef([]); 
   const secretBufferRef = useRef(''); 
+  
+  const bgmBuffersRef = useRef({});
+  const bgmNodeRef = useRef(null);
 
   const cleanupAudio = useCallback(() => {
     activeNodesRef.current.forEach(node => {
@@ -650,6 +1024,10 @@ export default function App() {
       try { node.disconnect(); } catch(e) {}
     });
     activeNodesRef.current = [];
+    if (bgmNodeRef.current) {
+      try { bgmNodeRef.current.stop(); } catch(e) {}
+      bgmNodeRef.current = null;
+    }
   }, []);
 
   const createTelemetryBuffer = useCallback((actx) => {
@@ -732,7 +1110,7 @@ export default function App() {
     cleanupAudio();
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [];
-    setIsSecretGame(false);
+    setSecretGameState('none');
     setBootStage('static'); 
     
     const actx = audioContextRef.current;
@@ -770,7 +1148,7 @@ export default function App() {
     cleanupAudio();
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [];
-    setIsSecretGame(false);
+    setSecretGameState('none');
 
     const actx = audioContextRef.current;
     if (!actx) return;
@@ -820,9 +1198,34 @@ export default function App() {
 
   }, [cleanupAudio, startTransmissionTTS]);
 
+  // Setup Global Game Audio Listener
+  useEffect(() => {
+    const handleBgm = (e) => {
+      if (bgmNodeRef.current) { try { bgmNodeRef.current.stop(); } catch(err){} }
+      const trackName = e.detail;
+      if (trackName === 'none') return;
+      const actx = audioContextRef.current;
+      if (!bgmBuffersRef.current[trackName] || !actx || actx.state !== 'running') return;
+      
+      const src = actx.createBufferSource();
+      src.buffer = bgmBuffersRef.current[trackName];
+      if (!trackName.includes('Over')) src.loop = true;
+      src.connect(actx.destination);
+      src.start();
+      bgmNodeRef.current = src;
+    };
+    window.addEventListener('bgmTrack', handleBgm);
+    return () => window.removeEventListener('bgmTrack', handleBgm);
+  }, []);
+
+  // Video source handler
   useEffect(() => {
     if (videoRef.current) {
-      if (isSecretGame) {
+      if (secretGameState === 'commando') {
+        videoRef.current.src = "/game2.mp4";
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log(e));
+      } else if (secretGameState === 'galaga' || secretGameState === 'menu') {
         videoRef.current.src = "/game.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
@@ -844,7 +1247,7 @@ export default function App() {
         videoRef.current.play().catch(e => console.log(e));
       }
     }
-  }, [bootStage, isSecretGame]);
+  }, [bootStage, secretGameState]);
 
   useEffect(() => {
     let timeout;
@@ -852,7 +1255,7 @@ export default function App() {
     if (bootStage === 'nosignal') {
       timeout = setTimeout(() => {
         setBootStage('tv-off-anim');
-      }, 7000);
+      }, 3000); // Changed to 3 seconds max
     } 
     else if (bootStage === 'tv-off-anim') {
       if (audioContextRef.current) {
@@ -913,6 +1316,7 @@ export default function App() {
     return () => clearTimeout(timeout);
   }, [bootStage]);
 
+  // SECRET CODE KEYSTROKE TRACKER
   useEffect(() => {
     const handleGlobalKeydown = (e) => {
       if (bootStage !== 'final-screen') return;
@@ -933,10 +1337,10 @@ export default function App() {
           secretBufferRef.current = secretBufferRef.current.slice(-20);
         }
 
-        // KONAMI CODE
+        // KONAMI CODE => SHOW MENU
         if (secretBufferRef.current.endsWith('UUDDLRLRBAE')) {
           secretBufferRef.current = '';
-          setIsSecretGame(true);
+          setSecretGameState('menu');
           const actx = audioContextRef.current;
           if (actx) {
              const osc = actx.createOscillator();
@@ -950,6 +1354,13 @@ export default function App() {
              gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.6);
              osc.start(actx.currentTime);
              osc.stop(actx.currentTime + 0.6);
+             
+             // Pre-build tracks if not already built
+             if (Object.keys(bgmBuffersRef.current).length === 0) {
+               buildTracks(actx).then(bufs => {
+                 bgmBuffersRef.current = bufs;
+               });
+             }
           }
         }
         
@@ -1119,7 +1530,7 @@ export default function App() {
             {/* 1. VIDEO BACKGROUND */}
             <video
               ref={videoRef}
-              className={`noise-video ${bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' || isSecretGame ? 'z-[15] mix-blend-screen pointer-events-none' : 'z-0'} ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
+              className={`noise-video ${(bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' || secretGameState !== 'none') ? 'z-[15] mix-blend-screen pointer-events-none' : 'z-0'} ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
               loop
               muted
               playsInline
@@ -1138,15 +1549,22 @@ export default function App() {
             {/* 4. MAIN CONTENT */}
             {bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-                <a href="https://djmerkone.com" className="vcr-font text-6xl md:text-8xl hover:text-red-500 transition-colors duration-200 cursor-pointer">
+                <a href="https://djmerkone.com" className="vcr-font text-8xl md:text-[12vw] hover:text-red-500 transition-colors duration-200 cursor-pointer">
                   NO SIGNAL
                 </a>
               </div>
             ) : bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? (
               <>
-                {isSecretGame ? (
-                  <GalagaGame audioCtx={audioContextRef.current} />
-                ) : (
+                {secretGameState === 'menu' && (
+                  <GameMenu onSelect={(game) => {
+                    setSecretGameState(game);
+                    window.dispatchEvent(new CustomEvent('bgmTrack', { detail: game === 'galaga' ? 'galagaStart' : 'commandoStart' }));
+                  }} />
+                )}
+                {secretGameState === 'galaga' && <GalagaGame audioCtx={audioContextRef.current} />}
+                {secretGameState === 'commando' && <CommandoGame audioCtx={audioContextRef.current} />}
+                
+                {secretGameState === 'none' && (
                   <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
                     <div className="absolute w-full px-2 text-center vcr-font select-none flex flex-col gap-5 md:gap-8 whitespace-nowrap overflow-visible">
                       <p className="text-6xl md:text-[8vw] mb-2 leading-none"><span className="wide-text">djmerkone</span></p>
