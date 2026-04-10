@@ -177,87 +177,78 @@ export default function App() {
     }
   }, [bootStage]);
 
-  // Handle the No Signal 7-second timer & TV Off animation
+  // Master State Machine for Outro Sequences
   useEffect(() => {
-    let timeout1, timeout2;
+    let timeout;
+    
     if (bootStage === 'nosignal') {
-      timeout1 = setTimeout(() => {
+      timeout = setTimeout(() => {
         setBootStage('tv-off-anim');
-        
-        // Play a classic power-down "zip" sound
-        if (audioContextRef.current) {
-          const actx = audioContextRef.current;
-          const osc = actx.createOscillator();
-          const gain = actx.createGain();
-          osc.frequency.setValueAtTime(800, actx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(10, actx.currentTime + 0.15);
-          gain.gain.setValueAtTime(0.5, actx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.15);
-          osc.connect(gain).connect(actx.destination);
-          osc.start(actx.currentTime);
-          osc.stop(actx.currentTime + 0.15);
-        }
-
-        // Wait for the CSS animation to complete, then hide everything
-        timeout2 = setTimeout(() => {
-          setBootStage('permanently-off');
-        }, 600); 
-
       }, 7000);
-    }
-    return () => {
-      clearTimeout(timeout1);
-      clearTimeout(timeout2);
-    };
-  }, [bootStage]);
-
-  // Handle the 3-second delay after permanently off, then turn back on for the final screen
-  useEffect(() => {
-    let t1, t2;
-    if (bootStage === 'permanently-off') {
-      t1 = setTimeout(() => {
+    } 
+    else if (bootStage === 'tv-off-anim') {
+      // Play a classic power-down "zip" sound
+      if (audioContextRef.current) {
+        const actx = audioContextRef.current;
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.frequency.setValueAtTime(800, actx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(10, actx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.5, actx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.15);
+        osc.connect(gain).connect(actx.destination);
+        osc.start(actx.currentTime);
+        osc.stop(actx.currentTime + 0.15);
+        activeNodesRef.current.push(osc);
+      }
+      // Wait for the CSS animation to complete, then hide everything
+      timeout = setTimeout(() => {
+        setBootStage('permanently-off');
+      }, 600); 
+    } 
+    else if (bootStage === 'permanently-off') {
+      timeout = setTimeout(() => {
         setBootStage('final-tv-on-flash');
+      }, 3000); // Wait 3 seconds in darkness
+    } 
+    else if (bootStage === 'final-tv-on-flash') {
+      if (audioContextRef.current) {
+        const actx = audioContextRef.current;
+        const t0 = actx.currentTime;
         
-        if (audioContextRef.current) {
-          const actx = audioContextRef.current;
-          const t0 = actx.currentTime;
-          
-          // Power On Audio: Heavy Thump
-          const thumpOsc = actx.createOscillator();
-          thumpOsc.type = 'square';
-          thumpOsc.frequency.setValueAtTime(150, t0);
-          thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
-          const thumpGain = actx.createGain();
-          thumpGain.gain.setValueAtTime(0.7, t0);
-          thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
-          thumpOsc.connect(thumpGain).connect(actx.destination);
-          thumpOsc.start(t0);
-          thumpOsc.stop(t0 + 0.15);
-          activeNodesRef.current.push(thumpOsc);
+        // Power On Audio: Heavy Thump
+        const thumpOsc = actx.createOscillator();
+        thumpOsc.type = 'square';
+        thumpOsc.frequency.setValueAtTime(150, t0);
+        thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+        const thumpGain = actx.createGain();
+        thumpGain.gain.setValueAtTime(0.7, t0);
+        thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+        thumpOsc.connect(thumpGain).connect(actx.destination);
+        thumpOsc.start(t0);
+        thumpOsc.stop(t0 + 0.15);
+        activeNodesRef.current.push(thumpOsc);
 
-          // Add a low-volume ambient hiss so it's not dead silent
-          const noiseBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
-          const output = noiseBuffer.getChannelData(0);
-          for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
-          const noiseSrc = actx.createBufferSource();
-          noiseSrc.buffer = noiseBuffer;
-          noiseSrc.loop = true;
-          const noiseGain = actx.createGain();
-          noiseGain.gain.setValueAtTime(0.015, t0);
-          noiseSrc.connect(noiseGain).connect(actx.destination);
-          noiseSrc.start(t0);
-          activeNodesRef.current.push(noiseSrc);
-        }
+        // Add a low-volume ambient hiss so it's not dead silent
+        const noiseBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+        const noiseSrc = actx.createBufferSource();
+        noiseSrc.buffer = noiseBuffer;
+        noiseSrc.loop = true;
+        const noiseGain = actx.createGain();
+        noiseGain.gain.setValueAtTime(0.015, t0);
+        noiseSrc.connect(noiseGain).connect(actx.destination);
+        noiseSrc.start(t0);
+        activeNodesRef.current.push(noiseSrc);
+      }
 
-        t2 = setTimeout(() => {
-          setBootStage('final-screen');
-        }, 150);
-      }, 3000); // Wait 3 seconds
+      timeout = setTimeout(() => {
+        setBootStage('final-screen');
+      }, 150);
     }
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+    
+    return () => clearTimeout(timeout);
   }, [bootStage]);
 
   // Total cleanup on unmount
