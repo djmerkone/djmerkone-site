@@ -1,87 +1,324 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
-// --- SECRET PONG GAME COMPONENT ---
-const PongGame = () => {
+// --- SECRET GALAGA-STYLE GAME COMPONENT ---
+const GalagaGame = ({ audioCtx }) => {
   const canvasRef = useRef(null);
+  
+  // Internal game state stored in ref to avoid react re-renders
+  const state = useRef({
+    status: 'start', // 'start', 'playing', 'gameover'
+    score: 0,
+    lives: 3,
+    wave: 1,
+    player: { x: 380, y: 520, w: 40, h: 40, speed: 6 },
+    bullets: [],
+    enemies: [],
+    particles: [],
+    stars: Array(60).fill().map(() => ({ x: Math.random() * 800, y: Math.random() * 600, speed: 0.5 + Math.random() * 3 })),
+    lastShot: 0
+  });
+
+  // Track keystrokes
+  const keys = useRef({});
+
+  useEffect(() => {
+    const handleKeyDown = e => { keys.current[e.key] = true; };
+    const handleKeyUp = e => { keys.current[e.key] = false; };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     let animationFrameId;
 
-    // Game Entities
-    let p1 = { x: 40, y: 160, w: 20, h: 100, score: 0 };
-    let p2 = { x: 740, y: 160, w: 20, h: 100, score: 0 };
-    let ball = { x: 400, y: 250, r: 12, vx: 7, vy: 7 };
-
-    const keys = {};
-    const handleKeyDown = e => { keys[e.key] = true; };
-    const handleKeyUp = e => { keys[e.key] = false; };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    const draw = () => {
-      // Clear background to let video bleed through
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw Net
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      for (let i = 0; i < canvas.height; i += 40) {
-        ctx.fillRect(canvas.width / 2 - 4, i, 8, 20);
-      }
-
-      // Draw Paddles & Ball
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.fillRect(p1.x, p1.y, p1.w, p1.h);
-      ctx.fillRect(p2.x, p2.y, p2.w, p2.h);
-      ctx.fillRect(ball.x - ball.r, ball.y - ball.r, ball.r * 2, ball.r * 2);
-
-      // Draw Scores
-      ctx.font = '80px "VT323", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(p1.score, canvas.width / 4, 100);
-      ctx.fillText(p2.score, (canvas.width / 4) * 3, 100);
+    // --- 8-Bit Audio Generators ---
+    const playShoot = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // High pitch
+      osc.frequency.exponentialRampToValueAtTime(110, audioCtx.currentTime + 0.1); // Drop pitch
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.1);
     };
 
-    const resetBall = () => {
-      ball.x = canvas.width / 2;
-      ball.y = canvas.height / 2;
-      ball.vx = (Math.random() > 0.5 ? 7 : -7);
-      ball.vy = (Math.random() > 0.5 ? 7 : -7);
+    const playExplode = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const bufferSize = audioCtx.sampleRate * 0.25;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1; // White noise
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+      noise.connect(gain).connect(audioCtx.destination);
+      noise.start();
+    };
+
+    const playGameOver = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+      osc.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 1.5);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 1.5);
+    };
+
+    // --- Game Logic ---
+    const spawnWave = (waveNum) => {
+      const arr = [];
+      const rows = Math.min(5, 1 + waveNum); // Max 5 rows
+      const cols = 8;
+      const offsetX = (800 - (cols * 60)) / 2;
+      for(let r=0; r<rows; r++) {
+        for(let c=0; c<cols; c++) {
+          arr.push({ 
+            x: offsetX + c * 60, y: 40 + r * 45, 
+            w: 30, h: 30, 
+            baseX: offsetX + c * 60, baseY: 40 + r * 45, 
+            phase: Math.random() * Math.PI * 2,
+            type: r % 3 // for coloring
+          });
+        }
+      }
+      return arr;
+    };
+
+    // Initialize first wave
+    if (state.current.enemies.length === 0) {
+       state.current.enemies = spawnWave(state.current.wave);
+    }
+
+    const draw = () => {
+      let gs = state.current;
+      
+      // Clear screen (Black background for CRT effect)
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Stars
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      gs.stars.forEach(s => {
+        ctx.fillRect(s.x, s.y, 2, 2);
+      });
+
+      if (gs.status === 'start') {
+        ctx.fillStyle = '#0f0';
+        ctx.font = '60px "VT323", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText("SPACE DEFENDER", 400, 250);
+        ctx.fillStyle = '#fff';
+        ctx.font = '24px "VT323", monospace';
+        ctx.fillText("PRESS ENTER TO START", 400, 320);
+        ctx.fillText("ARROWS: Move  |  SPACE: Shoot", 400, 370);
+        return;
+      }
+
+      // Draw Player Ship (Triangle)
+      ctx.fillStyle = '#0ff';
+      ctx.beginPath();
+      ctx.moveTo(gs.player.x + gs.player.w/2, gs.player.y);
+      ctx.lineTo(gs.player.x + gs.player.w, gs.player.y + gs.player.h);
+      ctx.lineTo(gs.player.x, gs.player.y + gs.player.h);
+      ctx.fill();
+
+      // Draw Enemies
+      const colors = ['#f00', '#f0f', '#fa0'];
+      gs.enemies.forEach(e => {
+        ctx.fillStyle = colors[e.type];
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+        // Simple alien detail
+        ctx.fillStyle = '#000';
+        ctx.fillRect(e.x + 6, e.y + 10, 4, 4);
+        ctx.fillRect(e.x + e.w - 10, e.y + 10, 4, 4);
+      });
+
+      // Draw Bullets
+      ctx.fillStyle = '#ff0';
+      gs.bullets.forEach(b => {
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+      });
+
+      // Draw Particles
+      gs.particles.forEach(p => {
+        ctx.fillStyle = `rgba(255, 150, 0, ${p.life / 30})`;
+        ctx.fillRect(p.x, p.y, 4, 4);
+      });
+
+      // Draw UI
+      ctx.fillStyle = '#fff';
+      ctx.font = '24px "VT323", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`SCORE: ${gs.score}`, 20, 30);
+      ctx.textAlign = 'center';
+      ctx.fillText(`WAVE: ${gs.wave}`, 400, 30);
+      ctx.textAlign = 'right';
+      // Draw lives as little ships
+      ctx.fillText(`LIVES:`, 680, 30);
+      ctx.fillStyle = '#0ff';
+      for(let i=0; i<gs.lives; i++) {
+        ctx.beginPath();
+        let lx = 700 + (i * 25);
+        ctx.moveTo(lx + 8, 15);
+        ctx.lineTo(lx + 16, 30);
+        ctx.lineTo(lx, 30);
+        ctx.fill();
+      }
+
+      if (gs.status === 'gameover') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0,0,800,600);
+        ctx.fillStyle = '#f00';
+        ctx.font = '80px "VT323", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText("GAME OVER", 400, 280);
+        ctx.fillStyle = '#fff';
+        ctx.font = '30px "VT323", monospace';
+        ctx.fillText("PRESS ENTER TO RESTART", 400, 350);
+      }
     };
 
     const update = () => {
-      // Player 1 Movement (Arrow Keys or W/S)
-      if (keys['ArrowUp'] || keys['w'] || keys['W']) p1.y -= 8;
-      if (keys['ArrowDown'] || keys['s'] || keys['S']) p1.y += 8;
-      p1.y = Math.max(0, Math.min(canvas.height - p1.h, p1.y));
+      let gs = state.current;
 
-      // Simple AI Movement
-      const aiCenter = p2.y + p2.h / 2;
-      if (aiCenter < ball.y - 15) p2.y += 5.5;
-      else if (aiCenter > ball.y + 15) p2.y -= 5.5;
-      p2.y = Math.max(0, Math.min(canvas.height - p2.h, p2.y));
+      // Update Starfield
+      gs.stars.forEach(s => {
+        s.y += s.speed;
+        if (s.y > 600) { s.y = 0; s.x = Math.random() * 800; }
+      });
 
-      // Ball Physics
-      ball.x += ball.vx;
-      ball.y += ball.vy;
-
-      // Wall Bounce (Top & Bottom)
-      if (ball.y - ball.r <= 0 || ball.y + ball.r >= canvas.height) {
-        ball.vy *= -1;
+      if (gs.status === 'start') {
+        if (keys.current['Enter']) { gs.status = 'playing'; }
+        return;
       }
 
-      // Paddle Collision
-      if (ball.x - ball.r <= p1.x + p1.w && ball.y >= p1.y && ball.y <= p1.y + p1.h && ball.vx < 0) {
-        ball.vx *= -1.05; // Speed up slightly on hit
-      }
-      if (ball.x + ball.r >= p2.x && ball.y >= p2.y && ball.y <= p2.y + p2.h && ball.vx > 0) {
-        ball.vx *= -1.05;
+      if (gs.status === 'gameover') {
+        if (keys.current['Enter']) {
+          gs.status = 'playing';
+          gs.score = 0;
+          gs.lives = 3;
+          gs.wave = 1;
+          gs.enemies = spawnWave(gs.wave);
+          gs.player.x = 380;
+          gs.bullets = [];
+          gs.particles = [];
+        }
+        return;
       }
 
-      // Scoring
-      if (ball.x < 0) { p2.score++; resetBall(); } 
-      else if (ball.x > canvas.width) { p1.score++; resetBall(); }
+      // Player Movement
+      if (keys.current['ArrowLeft'] || keys.current['a']) gs.player.x -= gs.player.speed;
+      if (keys.current['ArrowRight'] || keys.current['d']) gs.player.x += gs.player.speed;
+      gs.player.x = Math.max(0, Math.min(800 - gs.player.w, gs.player.x));
+
+      // Shooting
+      if ((keys.current[' '] || keys.current['ArrowUp'] || keys.current['w']) && Date.now() - gs.lastShot > 300) {
+        gs.bullets.push({ x: gs.player.x + gs.player.w/2 - 2, y: gs.player.y, w: 4, h: 12, vy: -12 });
+        gs.lastShot = Date.now();
+        playShoot();
+      }
+
+      // Bullets
+      for (let i = gs.bullets.length - 1; i >= 0; i--) {
+        let b = gs.bullets[i];
+        b.y += b.vy;
+        if (b.y < 0) { gs.bullets.splice(i, 1); continue; }
+        
+        // Bullet Hit Enemy
+        for (let j = gs.enemies.length - 1; j >= 0; j--) {
+          let e = gs.enemies[j];
+          if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
+            gs.enemies.splice(j, 1);
+            gs.bullets.splice(i, 1);
+            gs.score += 150;
+            playExplode();
+            // Explosion particles
+            for(let p=0; p<15; p++) {
+              gs.particles.push({
+                x: e.x + e.w/2, y: e.y + e.h/2,
+                vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
+                life: 30
+              });
+            }
+            break;
+          }
+        }
+      }
+
+      // Enemies Movement
+      let drift = 0.2 + (gs.wave * 0.1); 
+      let hitBottom = false;
+      for (let i = gs.enemies.length - 1; i >= 0; i--) {
+        let e = gs.enemies[i];
+        e.phase += 0.05;
+        e.x = e.baseX + Math.sin(e.phase) * 40;
+        e.y += drift;
+        e.baseY += drift;
+        if (e.y > 600) hitBottom = true;
+
+        // Enemy Hit Player
+        if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
+            e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
+            
+            gs.lives--;
+            playExplode();
+            gs.enemies.splice(i, 1);
+            
+            // Explosion particles for player hit
+            for(let p=0; p<30; p++) {
+              gs.particles.push({
+                x: gs.player.x + gs.player.w/2, y: gs.player.y + gs.player.h/2,
+                vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12,
+                life: 40
+              });
+            }
+
+            if (gs.lives <= 0) {
+              gs.status = 'gameover';
+              playGameOver();
+            }
+        }
+      }
+
+      if (hitBottom) {
+        gs.lives--;
+        playExplode();
+        if (gs.lives <= 0) {
+          gs.status = 'gameover';
+          playGameOver();
+        } else {
+          gs.enemies = spawnWave(gs.wave); // Reset wave positions
+        }
+      }
+
+      // Particles
+      for (let i = gs.particles.length - 1; i >= 0; i--) {
+        let p = gs.particles[i];
+        p.x += p.vx; p.y += p.vy; p.life--;
+        if (p.life <= 0) gs.particles.splice(i, 1);
+      }
+
+      // Next Wave
+      if (gs.enemies.length === 0 && gs.status !== 'gameover') {
+        gs.wave++;
+        gs.enemies = spawnWave(gs.wave);
+      }
     };
 
     const loop = () => {
@@ -91,22 +328,17 @@ const PongGame = () => {
     };
     loop();
 
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [audioCtx]);
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto">
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-black">
       <canvas 
         ref={canvasRef} 
         width={800} 
-        height={500} 
-        className="w-full max-w-4xl border-[6px] border-white/50 shadow-[0_0_50px_rgba(255,255,255,0.4)] bg-transparent"
+        height={600} 
+        className="w-full h-full object-fill bg-transparent"
       />
-      <p className="vcr-font mt-6 text-2xl opacity-80 blink-text">USE ARROW KEYS TO PLAY</p>
     </div>
   );
 };
@@ -116,7 +348,7 @@ export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
   // Stages: 'off', 'tv-on-flash', 'booting', 'on', 'nosignal', 'tv-off-anim', 'permanently-off', 'final-tv-on-flash', 'final-screen'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
-  const [isPong, setIsPong] = useState(false);
+  const [isSecretGame, setIsSecretGame] = useState(false);
   
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -221,7 +453,7 @@ export default function App() {
     cleanupAudio();
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [];
-    setIsPong(false);
+    setIsSecretGame(false);
     setBootStage('static'); // Instantly cut to raw interference
     
     const actx = audioContextRef.current;
@@ -263,7 +495,7 @@ export default function App() {
     cleanupAudio();
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [];
-    setIsPong(false);
+    setIsSecretGame(false);
 
     const actx = audioContextRef.current;
     if (!actx) return;
@@ -426,10 +658,10 @@ export default function App() {
           secretBufferRef.current = secretBufferRef.current.slice(-20);
         }
 
-        // KONAMI CODE PONG
+        // KONAMI CODE GALAGA
         if (secretBufferRef.current.endsWith('UUDDLRLRBAE')) {
           secretBufferRef.current = '';
-          setIsPong(true);
+          setIsSecretGame(true);
           const actx = audioContextRef.current;
           if (actx) {
              const osc = actx.createOscillator();
@@ -606,7 +838,7 @@ export default function App() {
             {/* 1. VIDEO BACKGROUND */}
             <video
               ref={videoRef}
-              className={`noise-video z-0 ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
+              className={`noise-video z-0 ${bootStage === 'off' || isSecretGame ? 'opacity-0' : 'opacity-85'}`}
               loop
               muted
               playsInline
@@ -631,8 +863,8 @@ export default function App() {
               </div>
             ) : bootStage === 'final-screen' || bootStage === 'final-tv-on-flash' ? (
               <>
-                {isPong ? (
-                  <PongGame />
+                {isSecretGame ? (
+                  <GalagaGame audioCtx={audioContextRef.current} />
                 ) : (
                   <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
                     <div className="absolute w-full max-w-4xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-4 md:gap-8">
