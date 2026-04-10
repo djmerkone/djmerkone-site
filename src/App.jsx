@@ -268,7 +268,7 @@ const GameMenu = ({ onSelect }) => {
 
 
 // --- BASS COMMANDO GAME COMPONENT ---
-const CommandoGame = ({ audioCtx }) => {
+const CommandoGame = ({ audioCtx, onMenu }) => {
   const canvasRef = useRef(null);
   
   const state = useRef({
@@ -353,6 +353,7 @@ const CommandoGame = ({ audioCtx }) => {
         drawCRTText(ctx, "BASS COMMANDO", 400, 250, '#0ff', '60px "VT323", monospace');
         drawCRTText(ctx, "DEFEND THE SECTOR", 400, 300, '#fff', '30px "VT323", monospace');
         drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 430, '#fff', '20px "VT323", monospace');
         return;
       }
 
@@ -411,6 +412,7 @@ const CommandoGame = ({ audioCtx }) => {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
         drawCRTText(ctx, "SYSTEM FAILURE", 400, 280, '#f00', '80px "VT323", monospace');
         drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
       }
 
       if (gs.status === 'levelcleared') {
@@ -422,6 +424,11 @@ const CommandoGame = ({ audioCtx }) => {
 
     const update = () => {
       let gs = state.current;
+
+      if (keys.current['m'] || keys.current['M']) {
+        onMenu();
+        return;
+      }
 
       if (gs.status === 'start' && keys.current['Enter']) {
         gs.incoming = spawnWave(1);
@@ -536,7 +543,7 @@ const CommandoGame = ({ audioCtx }) => {
     loop();
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [audioCtx]);
+  }, [audioCtx, onMenu]);
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
@@ -546,7 +553,7 @@ const CommandoGame = ({ audioCtx }) => {
 };
 
 // --- SECRET GALAGA-STYLE GAME COMPONENT ---
-const GalagaGame = ({ audioCtx }) => {
+const GalagaGame = ({ audioCtx, onMenu }) => {
   const canvasRef = useRef(null);
   
   const state = useRef({
@@ -737,7 +744,8 @@ const GalagaGame = ({ audioCtx }) => {
         drawCRTText(ctx, "BASS SPACE ADVENTURES", 400, 250, '#0f0', '60px "VT323", monospace');
         drawCRTText(ctx, "CHRONICLES OF CAPTAIN MERK", 400, 300, '#fff', '30px "VT323", monospace');
         drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
-        drawCRTText(ctx, "ARROWS: Move  |  SPACE: Shoot", 400, 420, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 460, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "ARROWS: Move  |  SPACE: Shoot", 400, 500, '#fff', '20px "VT323", monospace');
         return;
       }
 
@@ -809,6 +817,7 @@ const GalagaGame = ({ audioCtx }) => {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
         drawCRTText(ctx, "GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
         drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
       }
 
       if (gs.status === 'levelcleared') {
@@ -820,6 +829,11 @@ const GalagaGame = ({ audioCtx }) => {
 
     const update = () => {
       let gs = state.current;
+
+      if (keys.current['m'] || keys.current['M']) {
+        onMenu();
+        return;
+      }
 
       gs.stars.forEach(s => {
         s.y += s.speed;
@@ -990,7 +1004,7 @@ const GalagaGame = ({ audioCtx }) => {
     loop();
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [audioCtx]);
+  }, [audioCtx, onMenu]);
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
@@ -1086,7 +1100,7 @@ export default function App() {
       const utterance = new SpeechSynthesisUtterance(textToRead);
       utteranceRef.current = utterance; 
       utterance.pitch = 0.6;
-      utterance.rate = 0.9;
+      utterance.rate = 0.75;
       
       const voices = window.speechSynthesis.getVoices();
       const syntheticVoice = voices.find(v => v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('google') || v.lang === 'en-US');
@@ -1213,6 +1227,11 @@ export default function App() {
     };
     window.addEventListener('bgmTrack', handleBgm);
     return () => window.removeEventListener('bgmTrack', handleBgm);
+  }, []);
+
+  const handleReturnToMenu = useCallback(() => {
+    setSecretGameState('menu');
+    window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
   }, []);
 
   // Video source handler
@@ -1441,7 +1460,7 @@ export default function App() {
           }
 
           .animate-scroll {
-            animation: broadcast-scroll 35s linear forwards;
+            animation: broadcast-scroll 42s linear forwards;
           }
           
           @keyframes tv-off-squish {
@@ -1516,7 +1535,7 @@ export default function App() {
         )}
 
         {/* --- INTENSE WHITE FLASHES (Power On) --- */}
-        <div className={`absolute inset-0 z-[200] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'tv-on-flash' || bootStage === 'final-tv-on-flash' ? 'opacity-100' : 'opacity-0'}`}></div>
+        <div className={`absolute inset-0 z-[200] bg-white pointer-events-none ${bootStage === 'tv-on-flash' || bootStage === 'final-tv-on-flash' ? 'opacity-100 duration-0' : 'opacity-0 transition-opacity duration-[800ms]'}`}></div>
 
         {/* Main TV Frame */}
         <div className="relative w-full h-full bg-[#151515] rounded-[40px] md:rounded-[80px] overflow-hidden flex items-center justify-center global-bloom-wrap shadow-[0_0_150px_rgba(0,0,0,1)] ring-[24px] ring-[#0a0a0a]">
@@ -1546,7 +1565,7 @@ export default function App() {
             {/* 4. MAIN CONTENT */}
             {bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-                <a href="https://djmerkone.com" className="vcr-font text-[20vw] leading-none hover:text-red-500 transition-colors duration-200 cursor-pointer">
+                <a href="https://djmerkone.com" className="vcr-font text-center w-full max-w-[800px] text-[120px] md:text-[150px] leading-none hover:text-red-500 transition-colors duration-200 cursor-pointer wide-text">
                   NO SIGNAL
                 </a>
               </div>
@@ -1558,8 +1577,8 @@ export default function App() {
                     window.dispatchEvent(new CustomEvent('bgmTrack', { detail: game === 'galaga' ? 'galagaStart' : 'commandoStart' }));
                   }} />
                 )}
-                {secretGameState === 'galaga' && <GalagaGame audioCtx={audioContextRef.current} />}
-                {secretGameState === 'commando' && <CommandoGame audioCtx={audioContextRef.current} />}
+                {secretGameState === 'galaga' && <GalagaGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
+                {secretGameState === 'commando' && <CommandoGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
                 
                 {secretGameState === 'none' && (
                   <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
@@ -1578,14 +1597,20 @@ export default function App() {
               </>
             ) : (
               <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-700 ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
-                <div className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
-                  <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
-                  <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
-                  <p>A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
-                  <p>ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R&B, LATIN MUSIC, AND DRIVING HOUSE MUSIC.</p>
-                  <p>SOUND IS ARCHITECTURE.<br/>ENGINEERING IS THE SCIENCE OF EMOTION.</p>
-                  <p>HE DOESN'T JUST RECORD MUSIC.<br/>HE ENGINEERS THE FUTURE.</p>
-                  <p className="text-4xl md:text-6xl mt-8">STAY TUNED...</p>
+                <div className={`absolute w-full max-w-[1000px] px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
+                  <p className="text-5xl md:text-7xl mb-4 wide-text">djmerkone...</p>
+                  <p className="text-3xl md:text-5xl wide-text">OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
+                  <p className="text-3xl md:text-5xl wide-text">A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
+                  <p className="text-3xl md:text-5xl wide-text">ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R&B, LATIN MUSIC, AND DRIVING HOUSE MUSIC.</p>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-3xl md:text-5xl wide-text">SOUND IS ARCHITECTURE.</p>
+                    <p className="text-3xl md:text-5xl wide-text">ENGINEERING IS THE SCIENCE OF EMOTION.</p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-3xl md:text-5xl wide-text">HE DOESN'T JUST RECORD MUSIC.</p>
+                    <p className="text-3xl md:text-5xl wide-text">HE ENGINEERS THE FUTURE.</p>
+                  </div>
+                  <p className="text-5xl md:text-7xl mt-8 wide-text">STAY TUNED...</p>
                 </div>
               </div>
             )}
