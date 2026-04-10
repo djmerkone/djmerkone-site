@@ -68,7 +68,8 @@ export default function App() {
     
     const toneGain = actx.createGain();
     toneGain.gain.setValueAtTime(0, timeNow);
-    toneGain.gain.setValueAtTime(0.04, timeNow + 0.3); // Fade in at 300ms
+    // Boosted volume significantly from 0.04 to 0.25 for clear audibility
+    toneGain.gain.setValueAtTime(0.25, timeNow + 0.3); // Fade in at 300ms
     toneGain.gain.setValueAtTime(0, timeNow + 0.85);   // Cut off at 850ms
     
     osc1.connect(toneGain);
@@ -109,7 +110,8 @@ export default function App() {
       // Cancel any ongoing speech just in case
       window.speechSynthesis.cancel();
 
-      const textToRead = "djmerkone. OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION. A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY. ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R AND B, LATIN MUSIC, AND DRIVING HOUSE MUSIC. SOUND IS ARCHITECTURE. ENGINEERING IS THE SCIENCE OF EMOTION. HE DOESN'T JUST RECORD MUSIC. HE ENGINEERS THE FUTURE. STAY TUNED.";
+      // Phonetically spelled "dee jay merk one" for proper text-to-speech reading
+      const textToRead = "dee jay merk one. OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION. A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY. ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R AND B, LATIN MUSIC, AND DRIVING HOUSE MUSIC. SOUND IS ARCHITECTURE. ENGINEERING IS THE SCIENCE OF EMOTION. HE DOESN'T JUST RECORD MUSIC. HE ENGINEERS THE FUTURE. STAY TUNED.";
       
       const utterance = new SpeechSynthesisUtterance(textToRead);
       
