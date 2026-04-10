@@ -1,57 +1,35 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); // 'off', 'static', 'on', 'nosignal'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
+  const [loopCount, setLoopCount] = useState(0);
+  
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
   const noiseNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
   const utteranceRef = useRef(null); // Keeps TTS from being garbage collected
+  const timeoutsRef = useRef([]); // Stores timeouts for safe cleanup
 
-  // Ensure video auto-plays when switching sources to static.mp4
-  useEffect(() => {
-    if (bootStage === 'nosignal' && videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
-    }
-  }, [bootStage]);
-
-  // Stop TTS and Audio if user navigates away or unmounts
-  useEffect(() => {
-    return () => {
-      window.speechSynthesis.cancel();
-      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close();
-      }
-    };
-  }, []);
-
-  const handleProceed = async () => {
-    // 1. Request Fullscreen
-    if (document.documentElement.requestFullscreen) {
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch (err) {
-        console.log("Fullscreen request denied or unsupported.");
-      }
-    }
-
-    setHasAcceptedWarning(true);
-
-    // 2. Play background video
-    if (videoRef.current) {
-      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
-    }
-
-    // 3. Initialize Audio Context
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const actx = new AudioContext();
-    audioContextRef.current = actx;
+  // The reusable sequence function that plays the EAS, visuals, and TTS
+  const runSequence = useCallback(() => {
+    setBootStage('off'); // Reset visual state
     
+    // Clear any previous sequence timeouts
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+
+    const actx = audioContextRef.current;
+    if (!actx) return;
     const timeNow = actx.currentTime;
 
-    // --- NEW AUDIO SEQUENCE ---
+    // Clean up previous noise loop if it's still playing
+    if (noiseNodeRef.current) {
+      try { noiseNodeRef.current.stop(); } catch(e) {}
+    }
+
+    // --- AUDIO SEQUENCE ---
 
     // A: EAS Dual Tone Alert (Sawtooth waves at 853Hz and 960Hz)
     const easOsc1 = actx.createOscillator();
@@ -68,11 +46,9 @@ export default function App() {
     easGain.gain.setValueAtTime(0.2, timeNow);
     easGain.gain.setValueAtTime(0, timeNow + 0.5);
     // Pause: 0.5s to 1.0s
-    
     // Burst 2: 1.0s to 1.5s
     easGain.gain.setValueAtTime(0.2, timeNow + 1.0);
     easGain.gain.setValueAtTime(0, timeNow + 1.5);
-    // Pause: 1.5s to 2.0s
     
     easOsc1.connect(easGain);
     easOsc2.connect(easGain);
@@ -120,10 +96,10 @@ export default function App() {
     // --- VISUAL & TTS SEQUENCE ---
     
     // Switch to intense static burst at 2.7s
-    setTimeout(() => setBootStage('static'), 2700);
+    const t1 = setTimeout(() => setBootStage('static'), 2700);
     
     // Switch to 'on' visual and trigger TTS at exactly 3.0s
-    setTimeout(() => {
+    const t2 = setTimeout(() => {
       setBootStage('on');
 
       window.speechSynthesis.cancel();
@@ -156,6 +132,67 @@ export default function App() {
 
       window.speechSynthesis.speak(utterance);
     }, 3000);
+
+    timeoutsRef.current.push(t1, t2);
+  }, []);
+
+  // Ensure video auto-plays correctly when switching sources between off/nosignal
+  useEffect(() => {
+    if ((bootStage === 'nosignal' || bootStage === 'off') && videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+    }
+  }, [bootStage]);
+
+  // Handle the 7-second auto-restart loop for the 'nosignal' screen
+  useEffect(() => {
+    let timeout;
+    if (bootStage === 'nosignal') {
+      if (loopCount < 3) {
+        timeout = setTimeout(() => {
+          setLoopCount(prev => prev + 1);
+          runSequence();
+        }, 7000);
+      }
+    }
+    return () => clearTimeout(timeout);
+  }, [bootStage, loopCount, runSequence]);
+
+  // Stop TTS and Audio if user navigates away or unmounts
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+      timeoutsRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
+  const handleProceed = async () => {
+    // 1. Request Fullscreen
+    if (document.documentElement.requestFullscreen) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch (err) {
+        console.log("Fullscreen request denied or unsupported.");
+      }
+    }
+
+    setHasAcceptedWarning(true);
+
+    // 2. Play background video
+    if (videoRef.current) {
+      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+    }
+
+    // 3. Initialize Audio Context
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const actx = new AudioContext();
+    audioContextRef.current = actx;
+    
+    // Start the first transmission sequence
+    runSequence();
   };
 
   return (
@@ -210,8 +247,8 @@ export default function App() {
           }
 
           .animate-scroll {
-            /* Smooth 35s vertical scroll */
-            animation: broadcast-scroll 35s linear infinite forwards;
+            /* Smooth 35s vertical scroll - 'forwards' omitted to allow clean resets */
+            animation: broadcast-scroll 35s linear forwards;
           }
 
           /* INTENSE GLOBAL ANALOG BLOOM */
@@ -340,7 +377,8 @@ export default function App() {
             </div>
           ) : (
             <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
-              <div className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
+              {/* Added a key tied to bootStage to ensure animation fully restarts on DOM node remount */}
+              <div key={`scroll-${bootStage}`} className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
                 
                 <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
                 <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
