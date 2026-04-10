@@ -4,6 +4,7 @@ export default function App() {
   const [bootStage, setBootStage] = useState('off'); // 'off', 'static', 'on', 'nosignal'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
   const [loopCount, setLoopCount] = useState(0);
+  const [isChangingChannel, setIsChangingChannel] = useState(false);
   
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -14,7 +15,7 @@ export default function App() {
 
   // The reusable sequence function that plays the EAS, visuals, and TTS
   const runSequence = useCallback(() => {
-    setBootStage('off'); // Reset visual state
+    setBootStage('off'); // Reset visual state instantly
     
     // Clear any previous sequence timeouts
     timeoutsRef.current.forEach(clearTimeout);
@@ -144,14 +145,53 @@ export default function App() {
     }
   }, [bootStage]);
 
-  // Handle the 7-second auto-restart loop for the 'nosignal' screen
+  // Handle the 7-second auto-restart loop for the 'nosignal' screen with Channel Change effect
   useEffect(() => {
     let timeout;
     if (bootStage === 'nosignal') {
       if (loopCount < 3) {
         timeout = setTimeout(() => {
-          setLoopCount(prev => prev + 1);
-          runSequence();
+          
+          // --- Trigger Channel Change Effect ---
+          setIsChangingChannel(true);
+
+          // Audio: Channel change "clack" and static pop
+          if (audioContextRef.current) {
+            const actx = audioContextRef.current;
+            const time = actx.currentTime;
+            
+            // Mechanical "clack" tone
+            const clickOsc = actx.createOscillator();
+            clickOsc.type = 'square';
+            clickOsc.frequency.setValueAtTime(400, time);
+            clickOsc.frequency.exponentialRampToValueAtTime(40, time + 0.1);
+            const clickGain = actx.createGain();
+            clickGain.gain.setValueAtTime(0.5, time);
+            clickGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            clickOsc.connect(clickGain).connect(actx.destination);
+            clickOsc.start(time);
+            clickOsc.stop(time + 0.1);
+
+            // Static pop
+            const popBuf = actx.createBuffer(1, actx.sampleRate * 0.1, actx.sampleRate);
+            const popData = popBuf.getChannelData(0);
+            for(let i=0; i<popData.length; i++) popData[i] = Math.random() * 2 - 1;
+            const popSrc = actx.createBufferSource();
+            popSrc.buffer = popBuf;
+            const popGain = actx.createGain();
+            popGain.gain.setValueAtTime(0.4, time);
+            popGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            popSrc.connect(popGain).connect(actx.destination);
+            popSrc.start(time);
+          }
+
+          // Wait 250ms for the brief channel flash, then restart the sequence
+          setTimeout(() => {
+            setIsChangingChannel(false);
+            setLoopCount(prev => prev + 1);
+            runSequence();
+          }, 250);
+
         }, 7000);
       }
     }
@@ -401,10 +441,20 @@ export default function App() {
           {/* 7. VIGNETTE & TUBE DEPTH */}
           <div className="crt-vignette-bezel"></div>
 
-          {/* --- TV POWER ON SEQUENCE --- */}
-          <div className={`absolute inset-0 z-[100] bg-black pointer-events-none transition-opacity duration-700 ${bootStage === 'off' ? 'opacity-100' : 'opacity-0'}`}></div>
+          {/* --- TV BOOT / CHANNEL CHANGE SEQUENCES --- */}
+          {/* The off-screen state now has a dynamic transition duration. 
+            When switching to 'off', it transitions instantly (duration-0) for sharp channel cuts.
+            When switching away from 'off' (e.g. to 'static'), it uses duration-700 to fade gracefully.
+          */}
+          <div className={`absolute inset-0 z-[100] bg-black pointer-events-none ${bootStage === 'off' ? 'opacity-100 duration-0' : 'opacity-0 duration-700'} transition-opacity`}></div>
           <div className={`absolute inset-0 z-[101] pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
              <video src="/noise.mp4" className="noise-video opacity-100 contrast-[300%] brightness-150" loop muted autoPlay playsInline />
+          </div>
+
+          {/* New Fast Channel Change Overlay (Flashing invert and max contrast) */}
+          <div className={`absolute inset-0 z-[105] pointer-events-none transition-opacity duration-75 ${isChangingChannel ? 'opacity-100' : 'opacity-0'}`}>
+            <div className="absolute inset-0 bg-white mix-blend-overlay opacity-80"></div>
+            <video src="/noise.mp4" className="noise-video opacity-100 contrast-[500%] brightness-[200%] grayscale invert" loop muted autoPlay playsInline style={{ transform: 'scaleY(1.5) scaleX(1.1)' }} />
           </div>
 
         </div>
