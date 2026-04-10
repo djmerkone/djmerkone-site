@@ -1,238 +1,231 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
-  const [bootStage, setBootStage] = useState('off'); // 'off', 'static', 'on', 'nosignal'
+  const [bootStage, setBootStage] = useState('off'); 
+  // Stages: 'off', 'tv-on-flash', 'channel-switch-flash', 'booting', 'on', 'nosignal'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
   const [loopCount, setLoopCount] = useState(0);
-  const [isChangingChannel, setIsChangingChannel] = useState(false);
   
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
-  const noiseNodeRef = useRef(null);
-  const gainNodeRef = useRef(null);
-  const utteranceRef = useRef(null); // Keeps TTS from being garbage collected
-  const timeoutsRef = useRef([]); // Stores timeouts for safe cleanup
+  const utteranceRef = useRef(null); 
+  const timeoutsRef = useRef([]); 
+  const activeNodesRef = useRef([]); // Keeps track of audio nodes for clean muting
 
-  // The reusable sequence function that plays the EAS, visuals, and TTS
-  const runSequence = useCallback(() => {
-    setBootStage('off'); // Reset visual state instantly
-    
-    // Clear any previous sequence timeouts
+  // Clean up audio nodes securely
+  const cleanupAudio = useCallback(() => {
+    activeNodesRef.current.forEach(node => {
+      try { node.stop(); } catch(e) {}
+      try { node.disconnect(); } catch(e) {}
+    });
+    activeNodesRef.current = [];
+  }, []);
+
+  // Generates the looping radio telemetry (hum, crackle, data chirps)
+  const createTelemetryBuffer = useCallback((actx) => {
+    const length = actx.sampleRate * 4; 
+    const buffer = actx.createBuffer(1, length, actx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0; i<length; i++) data[i] = 0;
+
+    // Add random data chirps
+    for(let b=0; b<6; b++) {
+      const start = Math.floor(Math.random() * (length - actx.sampleRate * 0.2));
+      const freq = 800 + Math.random() * 2000;
+      const dur = Math.floor(actx.sampleRate * (0.02 + Math.random() * 0.06));
+      for(let i=0; i<dur; i++) {
+        data[start + i] = Math.sin(2 * Math.PI * freq * i / actx.sampleRate) * 0.04;
+      }
+    }
+    // Add analog crackle
+    for(let i=0; i<length; i++) {
+      if(Math.random() > 0.9995) data[i] = (Math.random() * 2 - 1) * 0.15;
+    }
+    return buffer;
+  }, []);
+
+  // The master sequence controller
+  const runSequence = useCallback((isLoop = false) => {
+    cleanupAudio();
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [];
 
     const actx = audioContextRef.current;
     if (!actx) return;
-    const timeNow = actx.currentTime;
+    const t0 = actx.currentTime;
 
-    // Clean up previous noise loop if it's still playing
-    if (noiseNodeRef.current) {
-      try { noiseNodeRef.current.stop(); } catch(e) {}
+    // --- MECHANICAL CLICKS & FLASHES ---
+    if (isLoop) {
+      setBootStage('channel-switch-flash');
+      // Channel Switch Audio: Double "Ka-Chunk"
+      const clickOsc = actx.createOscillator();
+      clickOsc.type = 'square';
+      clickOsc.frequency.setValueAtTime(300, t0);
+      clickOsc.frequency.setValueAtTime(50, t0 + 0.03);
+      clickOsc.frequency.setValueAtTime(300, t0 + 0.06);
+      clickOsc.frequency.setValueAtTime(50, t0 + 0.09);
+      const clickGain = actx.createGain();
+      clickGain.gain.setValueAtTime(0.6, t0);
+      clickGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+      clickOsc.connect(clickGain).connect(actx.destination);
+      clickOsc.start(t0);
+      clickOsc.stop(t0 + 0.15);
+      activeNodesRef.current.push(clickOsc);
+    } else {
+      setBootStage('tv-on-flash');
+      // Power On Audio: Heavy Thump
+      const thumpOsc = actx.createOscillator();
+      thumpOsc.type = 'square';
+      thumpOsc.frequency.setValueAtTime(150, t0);
+      thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+      const thumpGain = actx.createGain();
+      thumpGain.gain.setValueAtTime(0.7, t0);
+      thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+      thumpOsc.connect(thumpGain).connect(actx.destination);
+      thumpOsc.start(t0);
+      thumpOsc.stop(t0 + 0.15);
+      activeNodesRef.current.push(thumpOsc);
     }
 
-    // --- AUDIO SEQUENCE ---
+    // Step 1: Reveal Background instantly after the 150ms flash
+    const tBoot = setTimeout(() => setBootStage('booting'), 150);
 
-    // A: EAS Dual Tone Alert (Sawtooth waves at 853Hz and 960Hz)
+    // --- WARNING BEEP SEQUENCE ---
+
+    // EAS Dual Tones (853Hz & 960Hz)
     const easOsc1 = actx.createOscillator();
     const easOsc2 = actx.createOscillator();
-    easOsc1.type = 'sawtooth';
-    easOsc2.type = 'sawtooth';
-    easOsc1.frequency.value = 853; 
-    easOsc2.frequency.value = 960; 
-    
+    easOsc1.type = 'sawtooth'; easOsc2.type = 'sawtooth';
+    easOsc1.frequency.value = 853; easOsc2.frequency.value = 960;
     const easGain = actx.createGain();
-    easGain.gain.setValueAtTime(0, timeNow);
-    
-    // Burst 1: 0.0s to 0.5s
-    easGain.gain.setValueAtTime(0.2, timeNow);
-    easGain.gain.setValueAtTime(0, timeNow + 0.5);
-    // Pause: 0.5s to 1.0s
-    // Burst 2: 1.0s to 1.5s
-    easGain.gain.setValueAtTime(0.2, timeNow + 1.0);
-    easGain.gain.setValueAtTime(0, timeNow + 1.5);
-    
-    easOsc1.connect(easGain);
-    easOsc2.connect(easGain);
-    easGain.connect(actx.destination);
-    
-    easOsc1.start(timeNow);
-    easOsc2.start(timeNow);
-    easOsc1.stop(timeNow + 1.6);
-    easOsc2.stop(timeNow + 1.6);
+    easGain.gain.setValueAtTime(0, t0);
+    // Burst 1 (0.2s - 0.7s)
+    easGain.gain.setValueAtTime(0.2, t0 + 0.2);
+    easGain.gain.setValueAtTime(0, t0 + 0.7);
+    // Burst 2 (1.2s - 1.7s)
+    easGain.gain.setValueAtTime(0.2, t0 + 1.2);
+    easGain.gain.setValueAtTime(0, t0 + 1.7);
+    easOsc1.connect(easGain); easOsc2.connect(easGain); easGain.connect(actx.destination);
+    easOsc1.start(t0 + 0.2); easOsc2.start(t0 + 0.2);
+    easOsc1.stop(t0 + 1.8); easOsc2.stop(t0 + 1.8);
+    activeNodesRef.current.push(easOsc1, easOsc2);
 
-    // B: 1-Second Sinewave Beep (1000Hz)
+    // SMPTE Sine Beep (1000Hz)
     const sineOsc = actx.createOscillator();
     sineOsc.type = 'sine';
     sineOsc.frequency.value = 1000;
-    
     const sineGain = actx.createGain();
-    sineGain.gain.setValueAtTime(0, timeNow);
-    // Beep: 2.0s to 3.0s
-    sineGain.gain.setValueAtTime(0.25, timeNow + 2.0); 
-    sineGain.gain.setValueAtTime(0, timeNow + 3.0);   
-    
-    sineOsc.connect(sineGain);
-    sineGain.connect(actx.destination);
-    
-    sineOsc.start(timeNow + 2.0);
-    sineOsc.stop(timeNow + 3.1);
+    sineGain.gain.setValueAtTime(0, t0);
+    sineGain.gain.setValueAtTime(0.25, t0 + 2.2); // Beep: 2.2s - 3.2s
+    sineGain.gain.setValueAtTime(0, t0 + 3.2);
+    sineOsc.connect(sineGain).connect(actx.destination);
+    sineOsc.start(t0 + 2.2); sineOsc.stop(t0 + 3.3);
+    activeNodesRef.current.push(sineOsc);
 
-    // C: Continuous Background Noise (Starts exactly at 3.0s)
-    const contBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
-    const contOutput = contBuffer.getChannelData(0);
-    for (let i = 0; i < contOutput.length; i++) {
-      contOutput[i] = Math.random() * 2 - 1;
-    }
-    noiseNodeRef.current = actx.createBufferSource();
-    noiseNodeRef.current.buffer = contBuffer;
-    noiseNodeRef.current.loop = true;
-    
-    gainNodeRef.current = actx.createGain();
-    gainNodeRef.current.gain.setValueAtTime(0, timeNow);
-    gainNodeRef.current.gain.setValueAtTime(0.04, timeNow + 3.0); 
-    
-    noiseNodeRef.current.connect(gainNodeRef.current).connect(actx.destination);
-    noiseNodeRef.current.start(timeNow + 3.0);
-
-    // --- VISUAL & TTS SEQUENCE ---
-    
-    // Switch to intense static burst at 2.7s
-    const t1 = setTimeout(() => setBootStage('static'), 2700);
-    
-    // Switch to 'on' visual and trigger TTS at exactly 3.0s
-    const t2 = setTimeout(() => {
+    // Step 2: Initiate Speech and Transmission Environment
+    const tOn = setTimeout(() => {
       setBootStage('on');
+      window.speechSynthesis.cancel(); // Cancel any existing speech
 
-      window.speechSynthesis.cancel();
+      const tNow = actx.currentTime;
 
-      // Phonetically spelled for TTS
+      // 1. Continuous White Noise Layer
+      const noiseBuffer = actx.createBuffer(1, 2 * actx.sampleRate, actx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+      const noiseSrc = actx.createBufferSource();
+      noiseSrc.buffer = noiseBuffer;
+      noiseSrc.loop = true;
+      const noiseGain = actx.createGain();
+      noiseGain.gain.setValueAtTime(0.04, tNow);
+      noiseSrc.connect(noiseGain).connect(actx.destination);
+      noiseSrc.start(tNow);
+      activeNodesRef.current.push(noiseSrc);
+
+      // 2. Radio Hum & Telemetry Layer (60Hz + Clicks)
+      const humOsc = actx.createOscillator();
+      humOsc.type = 'sine';
+      humOsc.frequency.value = 60;
+      const humGain = actx.createGain();
+      humGain.gain.setValueAtTime(0.1, tNow);
+      humOsc.connect(humGain).connect(actx.destination);
+      humOsc.start(tNow);
+      activeNodesRef.current.push(humOsc);
+
+      const telemetrySrc = actx.createBufferSource();
+      telemetrySrc.buffer = createTelemetryBuffer(actx);
+      telemetrySrc.loop = true;
+      telemetrySrc.connect(actx.destination);
+      telemetrySrc.start(tNow);
+      activeNodesRef.current.push(telemetrySrc);
+
+      // 3. Text to Speech
       const textToRead = "dee jay merk one. OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION. A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY. ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R AND B, LATIN MUSIC, AND DRIVING HOUSE MUSIC. SOUND IS ARCHITECTURE. ENGINEERING IS THE SCIENCE OF EMOTION. HE DOESN'T JUST RECORD MUSIC. HE ENGINEERS THE FUTURE. STAY TUNED.";
-      
       const utterance = new SpeechSynthesisUtterance(textToRead);
-      utteranceRef.current = utterance; // Store ref so event listener isn't lost
-      
-      // Make it sound slightly robotic/mechanical
+      utteranceRef.current = utterance; 
       utterance.pitch = 0.6;
       utterance.rate = 0.9;
       
       const voices = window.speechSynthesis.getVoices();
       const syntheticVoice = voices.find(v => v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('google') || v.lang === 'en-US');
-      if (syntheticVoice) {
-        utterance.voice = syntheticVoice;
-      }
+      if (syntheticVoice) utterance.voice = syntheticVoice;
 
-      // Trigger "NO SIGNAL" sequence when voice stops
       utterance.onend = () => {
         setBootStage('nosignal');
-        // Smoothly fade out the white noise audio
-        if (gainNodeRef.current && audioContextRef.current) {
-           gainNodeRef.current.gain.setValueAtTime(gainNodeRef.current.gain.value, audioContextRef.current.currentTime);
-           gainNodeRef.current.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + 0.3);
-        }
+        cleanupAudio(); // Instantly mute static and hum
       };
 
       window.speechSynthesis.speak(utterance);
-    }, 3000);
+    }, 3200);
 
-    timeoutsRef.current.push(t1, t2);
-  }, []);
+    timeoutsRef.current.push(tBoot, tOn);
+  }, [cleanupAudio, createTelemetryBuffer]);
 
-  // Ensure video auto-plays correctly when switching sources between off/nosignal
+  // Video source handler
   useEffect(() => {
-    if ((bootStage === 'nosignal' || bootStage === 'off') && videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+    if (videoRef.current) {
+      if (bootStage === 'nosignal' || bootStage === 'off') {
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+      }
     }
   }, [bootStage]);
 
-  // Handle the 7-second auto-restart loop for the 'nosignal' screen with Channel Change effect
+  // No Signal Loop Timer
   useEffect(() => {
     let timeout;
-    if (bootStage === 'nosignal') {
-      if (loopCount < 3) {
-        timeout = setTimeout(() => {
-          
-          // --- Trigger Channel Change Effect ---
-          setIsChangingChannel(true);
-
-          // Audio: Channel change "clack" and static pop
-          if (audioContextRef.current) {
-            const actx = audioContextRef.current;
-            const time = actx.currentTime;
-            
-            // Mechanical "clack" tone
-            const clickOsc = actx.createOscillator();
-            clickOsc.type = 'square';
-            clickOsc.frequency.setValueAtTime(400, time);
-            clickOsc.frequency.exponentialRampToValueAtTime(40, time + 0.1);
-            const clickGain = actx.createGain();
-            clickGain.gain.setValueAtTime(0.5, time);
-            clickGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
-            clickOsc.connect(clickGain).connect(actx.destination);
-            clickOsc.start(time);
-            clickOsc.stop(time + 0.1);
-
-            // Static pop
-            const popBuf = actx.createBuffer(1, actx.sampleRate * 0.1, actx.sampleRate);
-            const popData = popBuf.getChannelData(0);
-            for(let i=0; i<popData.length; i++) popData[i] = Math.random() * 2 - 1;
-            const popSrc = actx.createBufferSource();
-            popSrc.buffer = popBuf;
-            const popGain = actx.createGain();
-            popGain.gain.setValueAtTime(0.4, time);
-            popGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
-            popSrc.connect(popGain).connect(actx.destination);
-            popSrc.start(time);
-          }
-
-          // Wait 250ms for the brief channel flash, then restart the sequence
-          setTimeout(() => {
-            setIsChangingChannel(false);
-            setLoopCount(prev => prev + 1);
-            runSequence();
-          }, 250);
-
-        }, 7000);
-      }
+    if (bootStage === 'nosignal' && loopCount < 3) {
+      timeout = setTimeout(() => {
+        setLoopCount(prev => prev + 1);
+        runSequence(true); // Pass true to trigger the channel-switch-flash
+      }, 7000);
     }
     return () => clearTimeout(timeout);
   }, [bootStage, loopCount, runSequence]);
 
-  // Stop TTS and Audio if user navigates away or unmounts
+  // Total cleanup on unmount
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel();
+      cleanupAudio();
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
       timeoutsRef.current.forEach(clearTimeout);
     };
-  }, []);
+  }, [cleanupAudio]);
 
   const handleProceed = async () => {
-    // 1. Request Fullscreen
     if (document.documentElement.requestFullscreen) {
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch (err) {
-        console.log("Fullscreen request denied or unsupported.");
-      }
+      try { await document.documentElement.requestFullscreen(); } catch (err) {}
     }
-
     setHasAcceptedWarning(true);
-
-    // 2. Play background video
-    if (videoRef.current) {
-      videoRef.current.play().catch(e => console.log("Video play blocked:", e));
-    }
-
-    // 3. Initialize Audio Context
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const actx = new AudioContext();
-    audioContextRef.current = actx;
+    if (videoRef.current) videoRef.current.play().catch(e => console.log("Video block:", e));
     
-    // Start the first transmission sequence
-    runSequence();
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioContextRef.current = new AudioContext();
+    
+    runSequence(false);
   };
 
   return (
@@ -248,121 +241,74 @@ export default function App() {
             letter-spacing: 0.1em;
             line-height: 1.4;
             text-shadow: 
-              -2px -2px 0 #000,  
-               2px -2px 0 #000,
-              -2px  2px 0 #000,
-               2px  2px 0 #000,
-               -4px 0 2px rgba(255, 0, 80, 0.6),
-               4px 0 2px rgba(0, 255, 255, 0.6),
-               0 0 25px rgba(255,255,255,0.9),
-               0 0 45px rgba(255,255,255,0.7),
-               0 0 70px rgba(255,255,255,0.4);
+              -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+              -4px 0 2px rgba(255, 0, 80, 0.6), 4px 0 2px rgba(0, 255, 255, 0.6),
+              0 0 25px rgba(255,255,255,0.9), 0 0 45px rgba(255,255,255,0.7), 0 0 70px rgba(255,255,255,0.4);
           }
 
           @media (min-width: 768px) {
-            .vcr-font { 
-              font-size: 2.5rem; 
-              letter-spacing: 0.15em;
-            }
+            .vcr-font { font-size: 2.5rem; letter-spacing: 0.15em; }
           }
 
           @keyframes artifact-hop {
-            0%   { background-position: 0% 0%; }
-            10%  { background-position: 15% -10%; }
-            20%  { background-position: -20% 15%; }
-            30%  { background-position: 10% 25%; }
-            40%  { background-position: -15% -20%; }
-            50%  { background-position: 25% 5%; }
-            60%  { background-position: -10% -15%; }
-            70%  { background-position: 20% 20%; }
-            80%  { background-position: -25% 10%; }
-            90%  { background-position: 5% -25%; }
+            0% { background-position: 0% 0%; } 10% { background-position: 15% -10%; }
+            20% { background-position: -20% 15%; } 30% { background-position: 10% 25%; }
+            40% { background-position: -15% -20%; } 50% { background-position: 25% 5%; }
+            60% { background-position: -10% -15%; } 70% { background-position: 20% 20%; }
+            80% { background-position: -25% 10%; } 90% { background-position: 5% -25%; }
             100% { background-position: 0% 0%; }
           }
 
-          /* Broadcast Teleprompter Scroll */
           @keyframes broadcast-scroll {
             0% { transform: translateY(100vh); }
             100% { transform: translateY(-150vh); }
           }
 
           .animate-scroll {
-            /* Smooth 35s vertical scroll - 'forwards' omitted to allow clean resets */
             animation: broadcast-scroll 35s linear forwards;
           }
 
-          /* INTENSE GLOBAL ANALOG BLOOM */
           .heavy-bloom {
-            position: absolute;
-            inset: 0;
-            z-index: 55;
+            position: absolute; inset: 0; z-index: 55;
             filter: blur(24px) brightness(1.9) contrast(120%);
-            opacity: 0.75;
-            mix-blend-mode: screen;
-            pointer-events: none;
-            background: inherit;
+            opacity: 0.75; mix-blend-mode: screen; pointer-events: none; background: inherit;
           }
 
           .scanlines-overlay {
-            position: absolute;
-            inset: 0;
-            z-index: 56;
+            position: absolute; inset: 0; z-index: 56;
             background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.45) 50%);
-            background-size: 100% 6px;
-            pointer-events: none;
+            background-size: 100% 6px; pointer-events: none;
           }
 
           .crt-vignette-bezel {
-            position: absolute;
-            inset: 0;
-            z-index: 60;
+            position: absolute; inset: 0; z-index: 60;
             background: radial-gradient(circle, transparent 30%, rgba(0,0,0,0.6) 100%);
-            box-shadow: inset 0 0 180px rgba(0,0,0,0.9);
-            pointer-events: none;
+            box-shadow: inset 0 0 180px rgba(0,0,0,0.9); pointer-events: none;
           }
           
           .global-bloom-wrap {
             filter: blur(1.2px) contrast(115%) brightness(1.15);
           }
 
-          /* Video handles both 16:9 and 4:3 stretching seamlessly with object-fit cover */
           .noise-video {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: cover; /* Stretches 4:3 static.mp4 perfectly over 16:9 screens */
             filter: contrast(130%) brightness(1.1) saturate(120%);
           }
 
           .rgb-artifacts-full {
-            position: absolute;
-            inset: -20%;
-            width: 140%;
-            height: 140%;
+            position: absolute; inset: -20%; width: 140%; height: 140%;
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.35 0.25' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-            background-size: 512px 512px;
-            animation: artifact-hop 0.1s steps(4) infinite;
-            image-rendering: pixelated;
-            filter: contrast(1200%) saturate(500%) brightness(1.3);
-            mix-blend-mode: screen;
-            opacity: 0.25;
-            pointer-events: none;
-            z-index: 54;
+            background-size: 512px 512px; animation: artifact-hop 0.1s steps(4) infinite;
+            image-rendering: pixelated; filter: contrast(1200%) saturate(500%) brightness(1.3);
+            mix-blend-mode: screen; opacity: 0.25; pointer-events: none; z-index: 54;
           }
           
-          .blink-text {
-            animation: blink 1s step-end infinite;
-          }
-          
-          @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-          }
+          .blink-text { animation: blink 1s step-end infinite; }
+          @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         `}
       </style>
 
-      {/* The TV Application Container */}
       <div className="relative w-full h-screen bg-[#020202] p-2 sm:p-6 md:p-12 flex items-center justify-center overflow-hidden">
         
         {/* --- WARNING OVERLAY --- */}
@@ -382,14 +328,18 @@ export default function App() {
           </div>
         )}
 
+        {/* --- INTENSE WHITE FLASHES (Power On & Channel Switch) --- */}
+        <div className={`absolute inset-0 z-[200] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'tv-on-flash' || bootStage === 'channel-switch-flash' ? 'opacity-100' : 'opacity-0'}`}></div>
+
         {/* Main TV Frame */}
         <div className="relative w-full h-full bg-[#111] rounded-[40px] md:rounded-[80px] overflow-hidden flex items-center justify-center global-bloom-wrap shadow-[0_0_150px_rgba(0,0,0,1)] ring-[24px] ring-[#0a0a0a]">
           
-          {/* 1. VIDEO BACKGROUND (Switches to static.mp4 when TTS finishes) */}
+          {/* 1. VIDEO BACKGROUND */}
+          {/* Hidden only on the initial 'off' state to ensure the first flash is pure. Visible during 'booting' (beeps). */}
           <video
             ref={videoRef}
             src={bootStage === 'nosignal' ? "/static.mp4" : "/noise.mp4"}
-            className="noise-video z-0 opacity-85"
+            className={`noise-video z-0 ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
             loop
             muted
             playsInline
@@ -405,7 +355,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 4. MAIN CONTENT (SCROLLING TEXT OR NO SIGNAL) */}
+          {/* 4. MAIN CONTENT */}
           {bootStage === 'nosignal' ? (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
               <a 
@@ -416,10 +366,8 @@ export default function App() {
               </a>
             </div>
           ) : (
-            <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
-              {/* Added a key tied to bootStage to ensure animation fully restarts on DOM node remount */}
-              <div key={`scroll-${bootStage}`} className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
-                
+            <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-700 ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
+              <div key={`scroll-${loopCount}`} className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
                 <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
                 <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
                 <p>A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
@@ -427,35 +375,18 @@ export default function App() {
                 <p>SOUND IS ARCHITECTURE.<br/>ENGINEERING IS THE SCIENCE OF EMOTION.</p>
                 <p>HE DOESN'T JUST RECORD MUSIC.<br/>HE ENGINEERS THE FUTURE.</p>
                 <p className="text-4xl md:text-6xl mt-8">STAY TUNED...</p>
-
               </div>
             </div>
           )}
 
-          {/* 5. BLOOM ENGINE (Luminous glow bleed) */}
+          {/* 5. BLOOM ENGINE */}
           <div className="heavy-bloom"></div>
 
-          {/* 6. SCANLINES & CRT ARTIFACTS */}
+          {/* 6. SCANLINES */}
           <div className="scanlines-overlay"></div>
           
-          {/* 7. VIGNETTE & TUBE DEPTH */}
+          {/* 7. VIGNETTE */}
           <div className="crt-vignette-bezel"></div>
-
-          {/* --- TV BOOT / CHANNEL CHANGE SEQUENCES --- */}
-          {/* The off-screen state now has a dynamic transition duration. 
-            When switching to 'off', it transitions instantly (duration-0) for sharp channel cuts.
-            When switching away from 'off' (e.g. to 'static'), it uses duration-700 to fade gracefully.
-          */}
-          <div className={`absolute inset-0 z-[100] bg-black pointer-events-none ${bootStage === 'off' ? 'opacity-100 duration-0' : 'opacity-0 duration-700'} transition-opacity`}></div>
-          <div className={`absolute inset-0 z-[101] pointer-events-none transition-opacity duration-300 ${bootStage === 'static' ? 'opacity-100' : 'opacity-0'}`}>
-             <video src="/noise.mp4" className="noise-video opacity-100 contrast-[300%] brightness-150" loop muted autoPlay playsInline />
-          </div>
-
-          {/* New Fast Channel Change Overlay (Flashing invert and max contrast) */}
-          <div className={`absolute inset-0 z-[105] pointer-events-none transition-opacity duration-75 ${isChangingChannel ? 'opacity-100' : 'opacity-0'}`}>
-            <div className="absolute inset-0 bg-white mix-blend-overlay opacity-80"></div>
-            <video src="/noise.mp4" className="noise-video opacity-100 contrast-[500%] brightness-[200%] grayscale invert" loop muted autoPlay playsInline style={{ transform: 'scaleY(1.5) scaleX(1.1)' }} />
-          </div>
 
         </div>
       </div>
