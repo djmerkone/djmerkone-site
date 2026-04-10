@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
-  // Stages: 'off', 'tv-on-flash', 'channel-switch-flash', 'booting', 'on', 'nosignal'
+  // Stages: 'off', 'tv-on-flash', 'booting', 'on', 'nosignal', 'tv-off-anim', 'permanently-off'
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
-  const [loopCount, setLoopCount] = useState(0);
   
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -45,7 +44,7 @@ export default function App() {
   }, []);
 
   // The master sequence controller
-  const runSequence = useCallback((isLoop = false) => {
+  const runSequence = useCallback(() => {
     cleanupAudio();
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [];
@@ -55,37 +54,19 @@ export default function App() {
     const t0 = actx.currentTime;
 
     // --- MECHANICAL CLICKS & FLASHES ---
-    if (isLoop) {
-      setBootStage('channel-switch-flash');
-      // Channel Switch Audio: Double "Ka-Chunk"
-      const clickOsc = actx.createOscillator();
-      clickOsc.type = 'square';
-      clickOsc.frequency.setValueAtTime(300, t0);
-      clickOsc.frequency.setValueAtTime(50, t0 + 0.03);
-      clickOsc.frequency.setValueAtTime(300, t0 + 0.06);
-      clickOsc.frequency.setValueAtTime(50, t0 + 0.09);
-      const clickGain = actx.createGain();
-      clickGain.gain.setValueAtTime(0.6, t0);
-      clickGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
-      clickOsc.connect(clickGain).connect(actx.destination);
-      clickOsc.start(t0);
-      clickOsc.stop(t0 + 0.15);
-      activeNodesRef.current.push(clickOsc);
-    } else {
-      setBootStage('tv-on-flash');
-      // Power On Audio: Heavy Thump
-      const thumpOsc = actx.createOscillator();
-      thumpOsc.type = 'square';
-      thumpOsc.frequency.setValueAtTime(150, t0);
-      thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
-      const thumpGain = actx.createGain();
-      thumpGain.gain.setValueAtTime(0.7, t0);
-      thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
-      thumpOsc.connect(thumpGain).connect(actx.destination);
-      thumpOsc.start(t0);
-      thumpOsc.stop(t0 + 0.15);
-      activeNodesRef.current.push(thumpOsc);
-    }
+    setBootStage('tv-on-flash');
+    // Power On Audio: Heavy Thump
+    const thumpOsc = actx.createOscillator();
+    thumpOsc.type = 'square';
+    thumpOsc.frequency.setValueAtTime(150, t0);
+    thumpOsc.frequency.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+    const thumpGain = actx.createGain();
+    thumpGain.gain.setValueAtTime(0.7, t0);
+    thumpGain.gain.exponentialRampToValueAtTime(0.01, t0 + 0.15);
+    thumpOsc.connect(thumpGain).connect(actx.destination);
+    thumpOsc.start(t0);
+    thumpOsc.stop(t0 + 0.15);
+    activeNodesRef.current.push(thumpOsc);
 
     // Step 1: Reveal Background instantly after the 150ms flash
     const tBoot = setTimeout(() => setBootStage('booting'), 150);
@@ -187,21 +168,48 @@ export default function App() {
       if (bootStage === 'nosignal' || bootStage === 'off') {
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log("Video play blocked:", e));
+      } else if (bootStage === 'permanently-off') {
+        // Fully stop and clear video resources on final power down
+        videoRef.current.pause();
+        videoRef.current.removeAttribute('src'); 
+        videoRef.current.load();
       }
     }
   }, [bootStage]);
 
-  // No Signal Loop Timer
+  // Handle the No Signal 7-second timer & TV Off animation
   useEffect(() => {
-    let timeout;
-    if (bootStage === 'nosignal' && loopCount < 3) {
-      timeout = setTimeout(() => {
-        setLoopCount(prev => prev + 1);
-        runSequence(true); // Pass true to trigger the channel-switch-flash
+    let timeout1, timeout2;
+    if (bootStage === 'nosignal') {
+      timeout1 = setTimeout(() => {
+        setBootStage('tv-off-anim');
+        
+        // Play a classic power-down "zip" sound
+        if (audioContextRef.current) {
+          const actx = audioContextRef.current;
+          const osc = actx.createOscillator();
+          const gain = actx.createGain();
+          osc.frequency.setValueAtTime(800, actx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(10, actx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.5, actx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.15);
+          osc.connect(gain).connect(actx.destination);
+          osc.start(actx.currentTime);
+          osc.stop(actx.currentTime + 0.15);
+        }
+
+        // Wait for the CSS animation to complete, then hide everything
+        timeout2 = setTimeout(() => {
+          setBootStage('permanently-off');
+        }, 600); 
+
       }, 7000);
     }
-    return () => clearTimeout(timeout);
-  }, [bootStage, loopCount, runSequence]);
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+    };
+  }, [bootStage]);
 
   // Total cleanup on unmount
   useEffect(() => {
@@ -225,7 +233,7 @@ export default function App() {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     audioContextRef.current = new AudioContext();
     
-    runSequence(false);
+    runSequence();
   };
 
   return (
@@ -267,6 +275,18 @@ export default function App() {
           .animate-scroll {
             animation: broadcast-scroll 35s linear forwards;
           }
+          
+          /* CRT Squish and Fade Animation */
+          @keyframes tv-off-squish {
+            0% { transform: scale(1, 1); filter: brightness(1); }
+            40% { transform: scale(1, 0.005); filter: brightness(10); }
+            100% { transform: scale(0, 0.005); filter: brightness(0); }
+          }
+
+          .animate-tv-off {
+            animation: tv-off-squish 0.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+            transform-origin: center;
+          }
 
           .heavy-bloom {
             position: absolute; inset: 0; z-index: 55;
@@ -292,7 +312,7 @@ export default function App() {
 
           .noise-video {
             position: absolute; inset: 0; width: 100%; height: 100%;
-            object-fit: cover; /* Stretches 4:3 static.mp4 perfectly over 16:9 screens */
+            object-fit: cover;
             filter: contrast(130%) brightness(1.1) saturate(120%);
           }
 
@@ -328,64 +348,68 @@ export default function App() {
           </div>
         )}
 
-        {/* --- INTENSE WHITE FLASHES (Power On & Channel Switch) --- */}
-        <div className={`absolute inset-0 z-[200] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'tv-on-flash' || bootStage === 'channel-switch-flash' ? 'opacity-100' : 'opacity-0'}`}></div>
+        {/* --- INTENSE WHITE FLASHES (Power On) --- */}
+        <div className={`absolute inset-0 z-[200] bg-white pointer-events-none transition-opacity duration-300 ${bootStage === 'tv-on-flash' ? 'opacity-100' : 'opacity-0'}`}></div>
 
         {/* Main TV Frame */}
-        <div className="relative w-full h-full bg-[#111] rounded-[40px] md:rounded-[80px] overflow-hidden flex items-center justify-center global-bloom-wrap shadow-[0_0_150px_rgba(0,0,0,1)] ring-[24px] ring-[#0a0a0a]">
+        {/* We use #151515 to simulate the dark grey color of an powered-down glass CRT screen */}
+        <div className="relative w-full h-full bg-[#151515] rounded-[40px] md:rounded-[80px] overflow-hidden flex items-center justify-center global-bloom-wrap shadow-[0_0_150px_rgba(0,0,0,1)] ring-[24px] ring-[#0a0a0a]">
           
-          {/* 1. VIDEO BACKGROUND */}
-          {/* Hidden only on the initial 'off' state to ensure the first flash is pure. Visible during 'booting' (beeps). */}
-          <video
-            ref={videoRef}
-            src={bootStage === 'nosignal' ? "/static.mp4" : "/noise.mp4"}
-            className={`noise-video z-0 ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
-            loop
-            muted
-            playsInline
-          />
+          {/* Active Signal Layer (Disappears entirely when permanently off) */}
+          <div className={`absolute inset-0 w-full h-full ${bootStage === 'tv-off-anim' ? 'animate-tv-off' : ''} ${bootStage === 'permanently-off' ? 'hidden' : 'block'}`}>
+            
+            {/* 1. VIDEO BACKGROUND */}
+            <video
+              ref={videoRef}
+              src={bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? "/static.mp4" : "/noise.mp4"}
+              className={`noise-video z-0 ${bootStage === 'off' ? 'opacity-0' : 'opacity-85'}`}
+              loop
+              muted
+              playsInline
+            />
 
-          {/* 2. FULL-WIDTH RGB ARTIFACTS OVERLAY */}
-          <div className="rgb-artifacts-full"></div>
+            {/* 2. FULL-WIDTH RGB ARTIFACTS OVERLAY */}
+            <div className="rgb-artifacts-full"></div>
 
-          {/* 3. MUTE ICON (Displays during No Signal) */}
-          {bootStage === 'nosignal' && (
-            <div className="absolute top-6 left-8 md:top-10 md:left-12 z-[70] vcr-font text-[#0f0] text-4xl md:text-6xl blink-text !text-shadow-none pointer-events-none" style={{textShadow: '0 0 10px #0f0'}}>
-              MUTE
-            </div>
-          )}
-
-          {/* 4. MAIN CONTENT */}
-          {bootStage === 'nosignal' ? (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-              <a 
-                href="https://djmerkone.com" 
-                className="vcr-font text-6xl md:text-8xl hover:text-red-500 transition-colors duration-200 cursor-pointer"
-              >
-                NO SIGNAL
-              </a>
-            </div>
-          ) : (
-            <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-700 ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
-              <div key={`scroll-${loopCount}`} className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
-                <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
-                <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
-                <p>A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
-                <p>ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R&B, LATIN MUSIC, AND DRIVING HOUSE MUSIC.</p>
-                <p>SOUND IS ARCHITECTURE.<br/>ENGINEERING IS THE SCIENCE OF EMOTION.</p>
-                <p>HE DOESN'T JUST RECORD MUSIC.<br/>HE ENGINEERS THE FUTURE.</p>
-                <p className="text-4xl md:text-6xl mt-8">STAY TUNED...</p>
+            {/* 3. MUTE ICON (Displays during No Signal) */}
+            {(bootStage === 'nosignal' || bootStage === 'tv-off-anim') && (
+              <div className="absolute top-6 left-8 md:top-10 md:left-12 z-[70] vcr-font text-[#0f0] text-4xl md:text-6xl blink-text !text-shadow-none pointer-events-none" style={{textShadow: '0 0 10px #0f0'}}>
+                MUTE
               </div>
-            </div>
-          )}
+            )}
 
-          {/* 5. BLOOM ENGINE */}
-          <div className="heavy-bloom"></div>
+            {/* 4. MAIN CONTENT */}
+            {(bootStage === 'nosignal' || bootStage === 'tv-off-anim') ? (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+                <a 
+                  href="https://djmerkone.com" 
+                  className="vcr-font text-6xl md:text-8xl hover:text-red-500 transition-colors duration-200 cursor-pointer"
+                >
+                  NO SIGNAL
+                </a>
+              </div>
+            ) : (
+              <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-700 ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
+                <div className={`absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font select-none flex flex-col gap-10 md:gap-14 ${bootStage === 'on' ? 'animate-scroll' : ''}`}>
+                  <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
+                  <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
+                  <p>A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
+                  <p>ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R&B, LATIN MUSIC, AND DRIVING HOUSE MUSIC.</p>
+                  <p>SOUND IS ARCHITECTURE.<br/>ENGINEERING IS THE SCIENCE OF EMOTION.</p>
+                  <p>HE DOESN'T JUST RECORD MUSIC.<br/>HE ENGINEERS THE FUTURE.</p>
+                  <p className="text-4xl md:text-6xl mt-8">STAY TUNED...</p>
+                </div>
+              </div>
+            )}
 
-          {/* 6. SCANLINES */}
-          <div className="scanlines-overlay"></div>
+            {/* 5. BLOOM ENGINE */}
+            <div className="heavy-bloom"></div>
+
+            {/* 6. SCANLINES */}
+            <div className="scanlines-overlay"></div>
+          </div>
           
-          {/* 7. VIGNETTE */}
+          {/* 7. VIGNETTE (Kept outside the turn-off animation so the TV box maintains depth) */}
           <div className="crt-vignette-bezel"></div>
 
         </div>
