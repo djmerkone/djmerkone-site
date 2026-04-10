@@ -351,8 +351,8 @@ const CommandoGame = ({ audioCtx }) => {
 
       if (gs.status === 'start') {
         drawCRTText(ctx, "BASS COMMANDO", 400, 250, '#0ff', '60px "VT323", monospace');
-        drawCRTText("DEFEND THE SECTOR", 400, 300, '#fff', '30px "VT323", monospace');
-        drawCRTText("PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "DEFEND THE SECTOR", 400, 300, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
         return;
       }
 
@@ -549,9 +549,8 @@ const CommandoGame = ({ audioCtx }) => {
 const GalagaGame = ({ audioCtx }) => {
   const canvasRef = useRef(null);
   
-  // Internal game state stored in ref to avoid react re-renders
   const state = useRef({
-    status: 'start', // 'start', 'playing', 'respawning', 'levelcleared', 'gameover'
+    status: 'start', 
     respawnTimer: 0,
     score: 0,
     highScore: 0,
@@ -563,11 +562,11 @@ const GalagaGame = ({ audioCtx }) => {
     enemies: [],
     particles: [],
     stars: Array(100).fill().map(() => {
-      const isColored = Math.random() < 0.20; // Approx 20% colored stars
+      const isColored = Math.random() < 0.20; 
       const colors = [
-        'rgba(0, 255, 255, 0.4)',   // Cyan
-        'rgba(255, 0, 255, 0.4)',   // Magenta
-        'rgba(255, 255, 0, 0.4)'    // Yellow
+        'rgba(0, 255, 255, 0.4)',   
+        'rgba(255, 0, 255, 0.4)',   
+        'rgba(255, 255, 0, 0.4)'    
       ];
       const starColor = isColored ? colors[Math.floor(Math.random() * colors.length)] : '#ffffff';
       return { 
@@ -606,7 +605,6 @@ const GalagaGame = ({ audioCtx }) => {
     const imgEnemy2 = new Image(); imgEnemy2.src = ASSETS.enemy2;
     const enemyImgs = [imgEnemy0, imgEnemy1, imgEnemy2];
 
-    // --- 8-Bit Audio Generators ---
     const playShoot = () => {
       if (!audioCtx || audioCtx.state !== 'running') return;
       const osc = audioCtx.createOscillator();
@@ -714,7 +712,7 @@ const GalagaGame = ({ audioCtx }) => {
         window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaOver' }));
       } else {
         gs.status = 'respawning';
-        gs.respawnTimer = 120; // Approx 2 seconds
+        gs.respawnTimer = 120; 
       }
     };
 
@@ -727,7 +725,6 @@ const GalagaGame = ({ audioCtx }) => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Render Stars
       gs.stars.forEach(s => { 
         ctx.fillStyle = s.color;
         ctx.shadowColor = s.shadow;
@@ -982,7 +979,7 @@ const GalagaGame = ({ audioCtx }) => {
 
       if (gs.enemies.length === 0 && gs.status !== 'gameover' && gs.status !== 'levelcleared') {
         gs.status = 'levelcleared';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); // Handled gracefully via event
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
       }
     };
 
@@ -1006,7 +1003,7 @@ const GalagaGame = ({ audioCtx }) => {
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
-  const [secretGameState, setSecretGameState] = useState('none'); // 'none', 'menu', 'galaga', 'commando'
+  const [secretGameState, setSecretGameState] = useState('none'); 
   
   const videoRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -1255,7 +1252,7 @@ export default function App() {
     if (bootStage === 'nosignal') {
       timeout = setTimeout(() => {
         setBootStage('tv-off-anim');
-      }, 3000); // Changed to 3 seconds max
+      }, 3000); // 3 seconds max
     } 
     else if (bootStage === 'tv-off-anim') {
       if (audioContextRef.current) {
@@ -1549,7 +1546,7 @@ export default function App() {
             {/* 4. MAIN CONTENT */}
             {bootStage === 'nosignal' || bootStage === 'tv-off-anim' ? (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-                <a href="https://djmerkone.com" className="vcr-font text-8xl md:text-[12vw] hover:text-red-500 transition-colors duration-200 cursor-pointer">
+                <a href="https://djmerkone.com" className="vcr-font text-[20vw] leading-none hover:text-red-500 transition-colors duration-200 cursor-pointer">
                   NO SIGNAL
                 </a>
               </div>
