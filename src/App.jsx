@@ -2,12 +2,11 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 // --- ASSET LOADER ---
 // Replace these base64 SVG strings with the paths to your downloaded itch.io PNGs
-// Example: player: "/assets/spaceshooter/player_ship.png"
 const ASSETS = {
-  player: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%230ff' d='M7 0h2v2H7zM5 2h6v2H5zM5 4h6v2H5zM3 6h10v2H3zM1 8h14v2H1zM1 10h14v2H1zM0 12h16v2H0zM0 14h2v2H0zM14 14h2v2h-2z'/%3E%3Cpath fill='%2300f' d='M7 4h2v6H7z'/%3E%3C/svg%3E",
-  enemy0: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23f00' d='M4 0h8v2H4zM2 2h12v2H2zM0 4h16v2H0zM0 6h16v2H0zM2 8h12v2H2zM4 10h8v2H4zM2 12h4v2H2zM10 12h4v2h-4z'/%3E%3Cpath fill='%23000' d='M4 4h2v2H4zM10 4h2v2h-2z'/%3E%3C/svg%3E",
-  enemy1: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23f0f' d='M6 0h4v2H6zM4 2h8v2H4zM2 4h12v2H2zM0 6h16v2H0zM0 8h16v2H0zM2 10h12v2H2zM2 12h2v2H2zM12 12h2v2h-2z'/%3E%3Cpath fill='%23000' d='M4 6h2v2H4zM10 6h2v2h-2z'/%3E%3C/svg%3E",
-  enemy2: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23fa0' d='M4 0h8v2H4zM2 2h12v2H2zM0 4h16v2H0zM0 6h16v4H0zM2 10h12v2H2zM4 12h2v2H4zM10 12h2v2h-2z'/%3E%3Cpath fill='%23000' d='M4 4h2v2H4zM10 4h2v2h-2zM6 8h4v2H6z'/%3E%3C/svg%3E"
+  player: "data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23fff' d='M7 0h2v14H7zM6 4h4v6H6zM5 6h6v2H5z'/%3E%3Cpath fill='%23f00' d='M5 8h2v4H5zM9 8h2v4H9zM3 10h2v4H3zM11 10h2v4H11zM1 12h2v4H1zM13 12h2v4h-2z'/%3E%3C/svg%3E",
+  enemy0: "data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23f0f' d='M6 0h4v2H6zm-2 2h8v2H4zm-2 2h12v2H2zM0 6h16v2H0zm0 2h4v2H0zm12 0h4v2h-4zm-8 2h8v2H4zm-2 2h4v2H2zm8 0h4v2h-4z'/%3E%3Cpath fill='%230ff' d='M4 6h2v2H4zm6 0h2v2h-2z'/%3E%3C/svg%3E",
+  enemy1: "data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23f00' d='M6 0h4v2H6zm-4 2h12v2H2zm-2 2h16v4H0zm2 4h2v2H2zm10 0h2v2h-2zm-6 2h4v2H6zm-4 2h2v2H2zm10 0h2v2h-2z'/%3E%3Cpath fill='%23ff0' d='M4 4h2v2H4zm6 0h2v2h-2zm-2 4h2v2H8z'/%3E%3C/svg%3E",
+  enemy2: "data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%230f0' d='M4 0h8v2H4zm-2 2h12v2H2zM0 4h16v4H0zm4 4h8v2H4zm-4 2h2v2H0zm14 0h2v2h-2zm-8 2h4v2H6z'/%3E%3Cpath fill='%23fff' d='M4 4h2v2H4zm6 0h2v2h-2z'/%3E%3C/svg%3E"
 };
 
 // --- SECRET GALAGA-STYLE GAME COMPONENT ---
@@ -21,7 +20,7 @@ const GalagaGame = ({ audioCtx }) => {
     highScore: 0,
     lives: 3,
     wave: 1,
-    player: { x: 380, y: 520, w: 40, h: 40, speed: 6 },
+    player: { x: 388, y: 530, w: 24, h: 24, speed: 6 },
     bullets: [],
     enemyBullets: [],
     enemies: [],
@@ -135,18 +134,20 @@ const GalagaGame = ({ audioCtx }) => {
     // --- Game Logic ---
     const spawnWave = (waveNum) => {
       const arr = [];
-      const rows = Math.min(5, 1 + waveNum); // Max 5 rows
-      const cols = 8;
-      const offsetX = (800 - (cols * 60)) / 2;
+      const rows = Math.min(6, 2 + waveNum); // Max 6 rows, starts with 3
+      const cols = 12; // Wider swarm
+      const spacingX = 40;
+      const spacingY = 35;
+      const offsetX = (800 - (cols * spacingX)) / 2;
       for(let r=0; r<rows; r++) {
         for(let c=0; c<cols; c++) {
           arr.push({ 
-            x: offsetX + c * 60, y: 40 + r * 45, 
-            w: 40, h: 40, 
-            baseX: offsetX + c * 60, baseY: 40 + r * 45, 
+            x: offsetX + c * spacingX, y: 40 + r * spacingY, 
+            w: 24, h: 24, // Smaller, refined ships
+            baseX: offsetX + c * spacingX, baseY: 40 + r * spacingY, 
             phase: Math.random() * Math.PI * 2,
             type: r % 3,
-            state: 'formation', // 'formation', 'attacking', 'returning'
+            state: 'formation',
             attackTimer: 0,
             attackStartX: 0,
             attackStartY: 0
@@ -161,17 +162,28 @@ const GalagaGame = ({ audioCtx }) => {
     }
 
     const fireEnemyBullet = (e, gs) => {
-      // Calculate angle to player
       let dx = gs.player.x + gs.player.w/2 - (e.x + e.w/2);
       let dy = gs.player.y + gs.player.h/2 - (e.y + e.h/2);
-      let mag = Math.sqrt(dx*dx + dy*dy);
+      
+      // Prevent shooting upwards
+      if (dy <= 0) return; 
+
+      // Calculate angle
+      let angle = Math.atan2(dy, dx);
+      let centerAngle = Math.PI / 2; // 90 degrees (straight down)
+      let maxAngle = 35 * Math.PI / 180; // 35 degree cone constraints
+      
+      // Clamp angle to strictly shoot within the cone
+      if (angle < centerAngle - maxAngle) angle = centerAngle - maxAngle;
+      if (angle > centerAngle + maxAngle) angle = centerAngle + maxAngle;
+
       let speed = 4 + gs.wave * 0.5;
       gs.enemyBullets.push({
-          x: e.x + e.w/2 - 3,
+          x: e.x + e.w/2 - 2,
           y: e.y + e.h,
-          w: 6, h: 12,
-          vx: (dx/mag) * speed,
-          vy: (dy/mag) * speed
+          w: 4, h: 10,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed
       });
       playEnemyShoot();
     };
@@ -186,14 +198,14 @@ const GalagaGame = ({ audioCtx }) => {
           life: 40
         });
       }
-      gs.enemyBullets = []; // Clear bullets so player doesn't instantly die upon respawn
+      gs.enemyBullets = []; 
       gs.enemies.forEach(e => { if(e.state === 'attacking') e.state = 'returning'; });
       
       if (gs.lives <= 0) {
         gs.status = 'gameover';
         playGameOver();
       } else {
-        gs.player.x = 380; // Reset player position
+        gs.player.x = 388; // Reset player position to middle
       }
     };
 
@@ -223,7 +235,7 @@ const GalagaGame = ({ audioCtx }) => {
       if (imgPlayer.complete) {
         ctx.drawImage(imgPlayer, gs.player.x, gs.player.y, gs.player.w, gs.player.h);
       } else {
-        ctx.fillStyle = '#0ff'; ctx.beginPath();
+        ctx.fillStyle = '#fff'; ctx.beginPath();
         ctx.moveTo(gs.player.x + gs.player.w/2, gs.player.y);
         ctx.lineTo(gs.player.x + gs.player.w, gs.player.y + gs.player.h);
         ctx.lineTo(gs.player.x, gs.player.y + gs.player.h); ctx.fill();
@@ -234,7 +246,7 @@ const GalagaGame = ({ audioCtx }) => {
         if (eImg && eImg.complete) {
           ctx.drawImage(eImg, e.x, e.y, e.w, e.h);
         } else {
-          ctx.fillStyle = ['#f00', '#f0f', '#fa0'][e.type];
+          ctx.fillStyle = ['#f0f', '#f00', '#0f0'][e.type];
           ctx.fillRect(e.x, e.y, e.w, e.h);
         }
       });
@@ -260,12 +272,12 @@ const GalagaGame = ({ audioCtx }) => {
       ctx.textAlign = 'right';
       ctx.fillText(`LIVES:`, 680, 30);
       for(let i=0; i<gs.lives; i++) {
-        let lx = 700 + (i * 30);
+        let lx = 690 + (i * 25);
         if (imgPlayer.complete) {
-          ctx.drawImage(imgPlayer, lx, 10, 20, 20);
+          ctx.drawImage(imgPlayer, lx, 10, 16, 16);
         } else {
-          ctx.fillStyle = '#0ff'; ctx.beginPath();
-          ctx.moveTo(lx + 10, 10); ctx.lineTo(lx + 20, 30); ctx.lineTo(lx, 30); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.beginPath();
+          ctx.moveTo(lx + 8, 10); ctx.lineTo(lx + 16, 26); ctx.lineTo(lx, 26); ctx.fill();
         }
       }
 
@@ -314,7 +326,7 @@ const GalagaGame = ({ audioCtx }) => {
           gs.status = 'playing';
           gs.score = 0; gs.lives = 3; gs.wave = 1;
           gs.enemies = spawnWave(gs.wave);
-          gs.player.x = 380;
+          gs.player.x = 388;
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
         }
         return;
@@ -372,9 +384,8 @@ const GalagaGame = ({ audioCtx }) => {
       }
 
       // Enemy Logic
-      let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 80)); 
+      let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 60)); 
       
-      // Randomly pick an enemy to attack
       if (Math.random() < 0.015 + (gs.wave * 0.002)) {
         let formEnemies = gs.enemies.filter(e => e.state === 'formation');
         if(formEnemies.length > 0) {
@@ -395,17 +406,15 @@ const GalagaGame = ({ audioCtx }) => {
         } 
         else if (e.state === 'attacking') {
           e.attackTimer++;
-          // S-Curve swooping attack pattern
           e.y = e.attackStartY + (e.attackTimer * (4 + gs.wave * 0.3));
           e.x = e.attackStartX + Math.sin(e.attackTimer * 0.05) * 100;
           e.x = Math.max(0, Math.min(800 - e.w, e.x));
 
-          // Shoot at player during dive
+          // Shoot at player during dive based on strict 35 degree constraint
           if (Math.random() < 0.015 + (gs.wave * 0.002)) {
             fireEnemyBullet(e, gs);
           }
 
-          // If off bottom screen, loop to top and return
           if (e.y > 600) {
             e.y = -50;
             e.state = 'returning';
@@ -416,14 +425,12 @@ const GalagaGame = ({ audioCtx }) => {
           let ty = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
           e.x += (tx - e.x) * 0.05;
           e.y += (ty - e.y) * 0.05;
-          // Snap back to formation when close
           if (Math.abs(e.x - tx) < 5 && Math.abs(e.y - ty) < 5) {
              e.state = 'formation';
              e.x = tx; e.y = ty;
           }
         }
 
-        // Enemy Hit Player ship collision
         if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
             e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
             
@@ -432,14 +439,12 @@ const GalagaGame = ({ audioCtx }) => {
         }
       }
 
-      // Particles
       for (let i = gs.particles.length - 1; i >= 0; i--) {
         let p = gs.particles[i];
         p.x += p.vx; p.y += p.vy; p.life--;
         if (p.life <= 0) gs.particles.splice(i, 1);
       }
 
-      // Next Wave Trigger
       if (gs.enemies.length === 0 && gs.status !== 'gameover' && gs.status !== 'levelcleared') {
         gs.status = 'levelcleared';
         playLevelClear();
