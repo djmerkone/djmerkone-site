@@ -57,23 +57,27 @@ export default function App() {
           .vcr-font {
             font-family: 'VT323', monospace;
             color: #fff;
-            /* Wider, bolder text matching the reference image */
-            font-size: 3.5rem;
-            letter-spacing: 0.15em;
-            transform: scaleX(1.3); /* Horizontally stretching the text for that wide OSD look */
+            /* Scaled down for paragraph readability */
+            font-size: 1.8rem;
+            letter-spacing: 0.1em;
+            line-height: 1.4;
             text-shadow: 
               -2px -2px 0 #000,  
                2px -2px 0 #000,
               -2px  2px 0 #000,
                2px  2px 0 #000,
-               -4px 0 2px rgba(255, 0, 80, 0.6), /* Stronger Magenta aberration */
-               4px 0 2px rgba(0, 255, 255, 0.6), /* Stronger Cyan aberration */
-               0 0 20px rgba(255,255,255,0.8),
-               0 0 40px rgba(255,255,255,0.4);
+               -4px 0 2px rgba(255, 0, 80, 0.6), /* Magenta aberration */
+               4px 0 2px rgba(0, 255, 255, 0.6), /* Cyan aberration */
+               0 0 25px rgba(255,255,255,0.9),
+               0 0 45px rgba(255,255,255,0.7),
+               0 0 70px rgba(255,255,255,0.4);
           }
 
           @media (min-width: 768px) {
-            .vcr-font { font-size: 6rem; }
+            .vcr-font { 
+              font-size: 2.5rem; 
+              letter-spacing: 0.15em;
+            }
           }
 
           /* Faster, more chaotic snapping for the RGB artifacts */
@@ -91,13 +95,24 @@ export default function App() {
             100% { background-position: 0% 0%; }
           }
 
+          /* Broadcast Teleprompter Scroll */
+          @keyframes broadcast-scroll {
+            0% { transform: translateY(100vh); }
+            100% { transform: translateY(-150vh); }
+          }
+
+          .animate-scroll {
+            /* 30 seconds for a smooth, readable broadcast crawl */
+            animation: broadcast-scroll 35s linear infinite;
+          }
+
           /* INTENSE GLOBAL ANALOG BLOOM */
           .heavy-bloom {
             position: absolute;
             inset: 0;
             z-index: 55;
-            filter: blur(20px) brightness(1.7) contrast(110%);
-            opacity: 0.6;
+            filter: blur(24px) brightness(1.9) contrast(120%);
+            opacity: 0.75;
             mix-blend-mode: screen;
             pointer-events: none;
             background: inherit;
@@ -122,7 +137,7 @@ export default function App() {
           }
           
           .global-bloom-wrap {
-            filter: blur(0.8px) contrast(115%) brightness(1.1);
+            filter: blur(1.2px) contrast(115%) brightness(1.15);
           }
 
           .noise-video {
@@ -131,8 +146,8 @@ export default function App() {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            /* Boost the video's contrast to make the whites searing */
-            filter: contrast(160%) brightness(1.3) saturate(140%);
+            /* Balanced to let the glitchy SMPTE color bars show clearly */
+            filter: contrast(130%) brightness(1.1) saturate(120%);
           }
 
           /* Full-width RGB Artifacts Overlay */
@@ -141,12 +156,10 @@ export default function App() {
             inset: -20%;
             width: 140%;
             height: 140%;
-            /* Updated Frequency to prevent vertical banding artifacts */
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.35 0.25' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
             background-size: 512px 512px;
             animation: artifact-hop 0.1s steps(4) infinite;
             image-rendering: pixelated;
-            /* Intense RGB pop */
             filter: contrast(1200%) saturate(500%) brightness(1.3);
             mix-blend-mode: screen;
             opacity: 0.25;
@@ -179,11 +192,25 @@ export default function App() {
           {/* 2. FULL-WIDTH RGB ARTIFACTS OVERLAY */}
           <div className="rgb-artifacts-full"></div>
 
-          {/* 3. MAIN CONTENT (COMING SOON) */}
-          <div className={`relative z-10 flex flex-col items-center justify-center w-full px-4 text-center transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
-            <h1 className="vcr-font select-none">
-              COMING SOON
-            </h1>
+          {/* 3. MAIN CONTENT (SCROLLING TEXT) */}
+          <div className={`absolute inset-0 z-10 flex flex-col items-center overflow-hidden transition-opacity duration-[1500ms] ${bootStage === 'on' ? 'opacity-100' : 'opacity-0'}`}>
+            <div className="absolute w-full max-w-3xl px-6 md:px-12 text-center vcr-font animate-scroll select-none flex flex-col gap-10 md:gap-14">
+              
+              <p className="text-4xl md:text-6xl mb-4">djmerkone...</p>
+              
+              <p>OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION.</p>
+              
+              <p>A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY.</p>
+              
+              <p>ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R&B, LATIN MUSIC, AND DRIVING HOUSE MUSIC.</p>
+              
+              <p>SOUND IS ARCHITECTURE.<br/>ENGINEERING IS THE SCIENCE OF EMOTION.</p>
+              
+              <p>HE DOESN'T JUST RECORD MUSIC.<br/>HE ENGINEERS THE FUTURE.</p>
+              
+              <p className="text-4xl md:text-6xl mt-8">STAY TUNED...</p>
+
+            </div>
           </div>
 
           {/* 4. BLOOM ENGINE (Luminous glow bleed) */}
