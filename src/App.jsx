@@ -1,5 +1,15 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
+// --- ASSET LOADER ---
+// Replace these base64 SVG strings with the paths to your downloaded itch.io PNGs
+// Example: player: "/assets/spaceshooter/player_ship.png"
+const ASSETS = {
+  player: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%230ff' d='M7 0h2v2H7zM5 2h6v2H5zM5 4h6v2H5zM3 6h10v2H3zM1 8h14v2H1zM1 10h14v2H1zM0 12h16v2H0zM0 14h2v2H0zM14 14h2v2h-2z'/%3E%3Cpath fill='%2300f' d='M7 4h2v6H7z'/%3E%3C/svg%3E",
+  enemy0: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23f00' d='M4 0h8v2H4zM2 2h12v2H2zM0 4h16v2H0zM0 6h16v2H0zM2 8h12v2H2zM4 10h8v2H4zM2 12h4v2H2zM10 12h4v2h-4z'/%3E%3Cpath fill='%23000' d='M4 4h2v2H4zM10 4h2v2h-2z'/%3E%3C/svg%3E",
+  enemy1: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23f0f' d='M6 0h4v2H6zM4 2h8v2H4zM2 4h12v2H2zM0 6h16v2H0zM0 8h16v2H0zM2 10h12v2H2zM2 12h2v2H2zM12 12h2v2h-2z'/%3E%3Cpath fill='%23000' d='M4 6h2v2H4zM10 6h2v2h-2z'/%3E%3C/svg%3E",
+  enemy2: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23fa0' d='M4 0h8v2H4zM2 2h12v2H2zM0 4h16v2H0zM0 6h16v4H0zM2 10h12v2H2zM4 12h2v2H4zM10 12h2v2h-2z'/%3E%3Cpath fill='%23000' d='M4 4h2v2H4zM10 4h2v2h-2zM6 8h4v2H6z'/%3E%3C/svg%3E"
+};
+
 // --- SECRET GALAGA-STYLE GAME COMPONENT ---
 const GalagaGame = ({ audioCtx }) => {
   const canvasRef = useRef(null);
@@ -37,6 +47,21 @@ const GalagaGame = ({ audioCtx }) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     let animationFrameId;
+
+    // Load Images
+    const imgPlayer = new Image();
+    imgPlayer.src = ASSETS.player;
+    
+    const imgEnemy0 = new Image();
+    imgEnemy0.src = ASSETS.enemy0;
+    
+    const imgEnemy1 = new Image();
+    imgEnemy1.src = ASSETS.enemy1;
+    
+    const imgEnemy2 = new Image();
+    imgEnemy2.src = ASSETS.enemy2;
+    
+    const enemyImgs = [imgEnemy0, imgEnemy1, imgEnemy2];
 
     // --- 8-Bit Audio Generators ---
     const playShoot = () => {
@@ -90,10 +115,10 @@ const GalagaGame = ({ audioCtx }) => {
         for(let c=0; c<cols; c++) {
           arr.push({ 
             x: offsetX + c * 60, y: 40 + r * 45, 
-            w: 30, h: 30, 
+            w: 40, h: 40, // Increased size to fit the retro sprites better
             baseX: offsetX + c * 60, baseY: 40 + r * 45, 
             phase: Math.random() * Math.PI * 2,
-            type: r % 3 // for coloring
+            type: r % 3 // maps to the 3 enemy sprites
           });
         }
       }
@@ -130,23 +155,29 @@ const GalagaGame = ({ audioCtx }) => {
         return;
       }
 
-      // Draw Player Ship (Triangle)
-      ctx.fillStyle = '#0ff';
-      ctx.beginPath();
-      ctx.moveTo(gs.player.x + gs.player.w/2, gs.player.y);
-      ctx.lineTo(gs.player.x + gs.player.w, gs.player.y + gs.player.h);
-      ctx.lineTo(gs.player.x, gs.player.y + gs.player.h);
-      ctx.fill();
+      // Draw Player Ship (Image)
+      if (imgPlayer.complete) {
+        ctx.drawImage(imgPlayer, gs.player.x, gs.player.y, gs.player.w, gs.player.h);
+      } else {
+        // Fallback triangle if image hasn't loaded
+        ctx.fillStyle = '#0ff';
+        ctx.beginPath();
+        ctx.moveTo(gs.player.x + gs.player.w/2, gs.player.y);
+        ctx.lineTo(gs.player.x + gs.player.w, gs.player.y + gs.player.h);
+        ctx.lineTo(gs.player.x, gs.player.y + gs.player.h);
+        ctx.fill();
+      }
 
-      // Draw Enemies
-      const colors = ['#f00', '#f0f', '#fa0'];
+      // Draw Enemies (Images)
       gs.enemies.forEach(e => {
-        ctx.fillStyle = colors[e.type];
-        ctx.fillRect(e.x, e.y, e.w, e.h);
-        // Simple alien detail
-        ctx.fillStyle = '#000';
-        ctx.fillRect(e.x + 6, e.y + 10, 4, 4);
-        ctx.fillRect(e.x + e.w - 10, e.y + 10, 4, 4);
+        const eImg = enemyImgs[e.type];
+        if (eImg && eImg.complete) {
+          ctx.drawImage(eImg, e.x, e.y, e.w, e.h);
+        } else {
+          // Fallback shape
+          ctx.fillStyle = ['#f00', '#f0f', '#fa0'][e.type];
+          ctx.fillRect(e.x, e.y, e.w, e.h);
+        }
       });
 
       // Draw Bullets
@@ -171,14 +202,18 @@ const GalagaGame = ({ audioCtx }) => {
       ctx.textAlign = 'right';
       // Draw lives as little ships
       ctx.fillText(`LIVES:`, 680, 30);
-      ctx.fillStyle = '#0ff';
       for(let i=0; i<gs.lives; i++) {
-        ctx.beginPath();
-        let lx = 700 + (i * 25);
-        ctx.moveTo(lx + 8, 15);
-        ctx.lineTo(lx + 16, 30);
-        ctx.lineTo(lx, 30);
-        ctx.fill();
+        let lx = 700 + (i * 30);
+        if (imgPlayer.complete) {
+          ctx.drawImage(imgPlayer, lx, 10, 20, 20);
+        } else {
+          ctx.fillStyle = '#0ff';
+          ctx.beginPath();
+          ctx.moveTo(lx + 10, 10);
+          ctx.lineTo(lx + 20, 30);
+          ctx.lineTo(lx, 30);
+          ctx.fill();
+        }
       }
 
       if (gs.status === 'gameover') {
