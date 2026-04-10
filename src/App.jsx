@@ -16,15 +16,21 @@ const GalagaGame = ({ audioCtx }) => {
   
   // Internal game state stored in ref to avoid react re-renders
   const state = useRef({
-    status: 'start', // 'start', 'playing', 'gameover'
+    status: 'start', // 'start', 'playing', 'levelcleared', 'gameover'
     score: 0,
+    highScore: 0,
     lives: 3,
     wave: 1,
     player: { x: 380, y: 520, w: 40, h: 40, speed: 6 },
     bullets: [],
+    enemyBullets: [],
     enemies: [],
     particles: [],
-    stars: Array(60).fill().map(() => ({ x: Math.random() * 800, y: Math.random() * 600, speed: 0.5 + Math.random() * 3 })),
+    stars: Array(100).fill().map(() => ({ 
+      x: Math.random() * 800, 
+      y: Math.random() * 600, 
+      speed: 2 + Math.random() * 6 // Faster parallax scrolling
+    })),
     lastShot: 0
   });
 
@@ -49,18 +55,10 @@ const GalagaGame = ({ audioCtx }) => {
     let animationFrameId;
 
     // Load Images
-    const imgPlayer = new Image();
-    imgPlayer.src = ASSETS.player;
-    
-    const imgEnemy0 = new Image();
-    imgEnemy0.src = ASSETS.enemy0;
-    
-    const imgEnemy1 = new Image();
-    imgEnemy1.src = ASSETS.enemy1;
-    
-    const imgEnemy2 = new Image();
-    imgEnemy2.src = ASSETS.enemy2;
-    
+    const imgPlayer = new Image(); imgPlayer.src = ASSETS.player;
+    const imgEnemy0 = new Image(); imgEnemy0.src = ASSETS.enemy0;
+    const imgEnemy1 = new Image(); imgEnemy1.src = ASSETS.enemy1;
+    const imgEnemy2 = new Image(); imgEnemy2.src = ASSETS.enemy2;
     const enemyImgs = [imgEnemy0, imgEnemy1, imgEnemy2];
 
     // --- 8-Bit Audio Generators ---
@@ -69,12 +67,25 @@ const GalagaGame = ({ audioCtx }) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'square';
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // High pitch
-      osc.frequency.exponentialRampToValueAtTime(110, audioCtx.currentTime + 0.1); // Drop pitch
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+      osc.frequency.exponentialRampToValueAtTime(110, audioCtx.currentTime + 0.1); 
       gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
       osc.connect(gain).connect(audioCtx.destination);
       osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+    };
+
+    const playEnemyShoot = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(400, audioCtx.currentTime); 
+      osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.15); 
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.15);
     };
 
     const playExplode = () => {
@@ -82,7 +93,7 @@ const GalagaGame = ({ audioCtx }) => {
       const bufferSize = audioCtx.sampleRate * 0.25;
       const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
       const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1; // White noise
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
       const noise = audioCtx.createBufferSource();
       noise.buffer = buffer;
       const gain = audioCtx.createGain();
@@ -105,6 +116,22 @@ const GalagaGame = ({ audioCtx }) => {
       osc.start(); osc.stop(audioCtx.currentTime + 1.5);
     };
 
+    const playLevelClear = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      const now = audioCtx.currentTime;
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.setValueAtTime(554.37, now + 0.1);
+      osc.frequency.setValueAtTime(659.25, now + 0.2);
+      osc.frequency.setValueAtTime(880, now + 0.3);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.6);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(); osc.stop(now + 0.6);
+    };
+
     // --- Game Logic ---
     const spawnWave = (waveNum) => {
       const arr = [];
@@ -115,33 +142,71 @@ const GalagaGame = ({ audioCtx }) => {
         for(let c=0; c<cols; c++) {
           arr.push({ 
             x: offsetX + c * 60, y: 40 + r * 45, 
-            w: 40, h: 40, // Increased size to fit the retro sprites better
+            w: 40, h: 40, 
             baseX: offsetX + c * 60, baseY: 40 + r * 45, 
             phase: Math.random() * Math.PI * 2,
-            type: r % 3 // maps to the 3 enemy sprites
+            type: r % 3,
+            state: 'formation', // 'formation', 'attacking', 'returning'
+            attackTimer: 0,
+            attackStartX: 0,
+            attackStartY: 0
           });
         }
       }
       return arr;
     };
 
-    // Initialize first wave
     if (state.current.enemies.length === 0) {
        state.current.enemies = spawnWave(state.current.wave);
     }
 
+    const fireEnemyBullet = (e, gs) => {
+      // Calculate angle to player
+      let dx = gs.player.x + gs.player.w/2 - (e.x + e.w/2);
+      let dy = gs.player.y + gs.player.h/2 - (e.y + e.h/2);
+      let mag = Math.sqrt(dx*dx + dy*dy);
+      let speed = 4 + gs.wave * 0.5;
+      gs.enemyBullets.push({
+          x: e.x + e.w/2 - 3,
+          y: e.y + e.h,
+          w: 6, h: 12,
+          vx: (dx/mag) * speed,
+          vy: (dy/mag) * speed
+      });
+      playEnemyShoot();
+    };
+
+    const playerHit = (gs) => {
+      gs.lives--;
+      playExplode();
+      for(let p=0; p<40; p++) {
+        gs.particles.push({
+          x: gs.player.x + gs.player.w/2, y: gs.player.y + gs.player.h/2,
+          vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15,
+          life: 40
+        });
+      }
+      gs.enemyBullets = []; // Clear bullets so player doesn't instantly die upon respawn
+      gs.enemies.forEach(e => { if(e.state === 'attacking') e.state = 'returning'; });
+      
+      if (gs.lives <= 0) {
+        gs.status = 'gameover';
+        playGameOver();
+      } else {
+        gs.player.x = 380; // Reset player position
+      }
+    };
+
+    const formatScore = (s) => String(s).padStart(6, '0');
+
     const draw = () => {
       let gs = state.current;
       
-      // Clear screen (Black background for CRT effect)
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw Stars
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      gs.stars.forEach(s => {
-        ctx.fillRect(s.x, s.y, 2, 2);
-      });
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      gs.stars.forEach(s => { ctx.fillRect(s.x, s.y, 2, 2); });
 
       if (gs.status === 'start') {
         ctx.fillStyle = '#0f0';
@@ -155,38 +220,31 @@ const GalagaGame = ({ audioCtx }) => {
         return;
       }
 
-      // Draw Player Ship (Image)
       if (imgPlayer.complete) {
         ctx.drawImage(imgPlayer, gs.player.x, gs.player.y, gs.player.w, gs.player.h);
       } else {
-        // Fallback triangle if image hasn't loaded
-        ctx.fillStyle = '#0ff';
-        ctx.beginPath();
+        ctx.fillStyle = '#0ff'; ctx.beginPath();
         ctx.moveTo(gs.player.x + gs.player.w/2, gs.player.y);
         ctx.lineTo(gs.player.x + gs.player.w, gs.player.y + gs.player.h);
-        ctx.lineTo(gs.player.x, gs.player.y + gs.player.h);
-        ctx.fill();
+        ctx.lineTo(gs.player.x, gs.player.y + gs.player.h); ctx.fill();
       }
 
-      // Draw Enemies (Images)
       gs.enemies.forEach(e => {
         const eImg = enemyImgs[e.type];
         if (eImg && eImg.complete) {
           ctx.drawImage(eImg, e.x, e.y, e.w, e.h);
         } else {
-          // Fallback shape
           ctx.fillStyle = ['#f00', '#f0f', '#fa0'][e.type];
           ctx.fillRect(e.x, e.y, e.w, e.h);
         }
       });
 
-      // Draw Bullets
-      ctx.fillStyle = '#ff0';
-      gs.bullets.forEach(b => {
-        ctx.fillRect(b.x, b.y, b.w, b.h);
-      });
+      ctx.fillStyle = '#0ff'; // Player bullets
+      gs.bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
-      // Draw Particles
+      ctx.fillStyle = '#f00'; // Enemy bullets
+      gs.enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, eb.w, eb.h));
+
       gs.particles.forEach(p => {
         ctx.fillStyle = `rgba(255, 150, 0, ${p.life / 30})`;
         ctx.fillRect(p.x, p.y, 4, 4);
@@ -196,43 +254,41 @@ const GalagaGame = ({ audioCtx }) => {
       ctx.fillStyle = '#fff';
       ctx.font = '24px "VT323", monospace';
       ctx.textAlign = 'left';
-      ctx.fillText(`SCORE: ${gs.score}`, 20, 30);
+      ctx.fillText(`SCORE: ${formatScore(gs.score)}`, 20, 30);
       ctx.textAlign = 'center';
-      ctx.fillText(`WAVE: ${gs.wave}`, 400, 30);
+      ctx.fillText(`HI-SCORE: ${formatScore(gs.highScore)}`, 400, 30);
       ctx.textAlign = 'right';
-      // Draw lives as little ships
       ctx.fillText(`LIVES:`, 680, 30);
       for(let i=0; i<gs.lives; i++) {
         let lx = 700 + (i * 30);
         if (imgPlayer.complete) {
           ctx.drawImage(imgPlayer, lx, 10, 20, 20);
         } else {
-          ctx.fillStyle = '#0ff';
-          ctx.beginPath();
-          ctx.moveTo(lx + 10, 10);
-          ctx.lineTo(lx + 20, 30);
-          ctx.lineTo(lx, 30);
-          ctx.fill();
+          ctx.fillStyle = '#0ff'; ctx.beginPath();
+          ctx.moveTo(lx + 10, 10); ctx.lineTo(lx + 20, 30); ctx.lineTo(lx, 30); ctx.fill();
         }
       }
 
       if (gs.status === 'gameover') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(0,0,800,600);
-        ctx.fillStyle = '#f00';
-        ctx.font = '80px "VT323", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText("GAME OVER", 400, 280);
-        ctx.fillStyle = '#fff';
-        ctx.font = '30px "VT323", monospace';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
+        ctx.fillStyle = '#f00'; ctx.font = '80px "VT323", monospace';
+        ctx.textAlign = 'center'; ctx.fillText("GAME OVER", 400, 280);
+        ctx.fillStyle = '#fff'; ctx.font = '30px "VT323", monospace';
         ctx.fillText("PRESS ENTER TO RESTART", 400, 350);
+      }
+
+      if (gs.status === 'levelcleared') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
+        ctx.fillStyle = '#0f0'; ctx.font = '60px "VT323", monospace';
+        ctx.textAlign = 'center'; ctx.fillText(`WAVE ${gs.wave} CLEARED!`, 400, 280);
+        ctx.fillStyle = '#fff'; ctx.font = '30px "VT323", monospace';
+        ctx.fillText("PRESS ENTER TO CONTINUE", 400, 350);
       }
     };
 
     const update = () => {
       let gs = state.current;
 
-      // Update Starfield
       gs.stars.forEach(s => {
         s.y += s.speed;
         if (s.y > 600) { s.y = 0; s.x = Math.random() * 800; }
@@ -243,16 +299,23 @@ const GalagaGame = ({ audioCtx }) => {
         return;
       }
 
+      if (gs.status === 'levelcleared') {
+        if (keys.current['Enter']) {
+          gs.wave++;
+          gs.enemies = spawnWave(gs.wave);
+          gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
+          gs.status = 'playing';
+        }
+        return;
+      }
+
       if (gs.status === 'gameover') {
         if (keys.current['Enter']) {
           gs.status = 'playing';
-          gs.score = 0;
-          gs.lives = 3;
-          gs.wave = 1;
+          gs.score = 0; gs.lives = 3; gs.wave = 1;
           gs.enemies = spawnWave(gs.wave);
           gs.player.x = 380;
-          gs.bullets = [];
-          gs.particles = [];
+          gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
         }
         return;
       }
@@ -262,33 +325,31 @@ const GalagaGame = ({ audioCtx }) => {
       if (keys.current['ArrowRight'] || keys.current['d']) gs.player.x += gs.player.speed;
       gs.player.x = Math.max(0, Math.min(800 - gs.player.w, gs.player.x));
 
-      // Shooting
+      // Player Shooting
       if ((keys.current[' '] || keys.current['ArrowUp'] || keys.current['w']) && Date.now() - gs.lastShot > 300) {
         gs.bullets.push({ x: gs.player.x + gs.player.w/2 - 2, y: gs.player.y, w: 4, h: 12, vy: -12 });
         gs.lastShot = Date.now();
         playShoot();
       }
 
-      // Bullets
+      // Player Bullets
       for (let i = gs.bullets.length - 1; i >= 0; i--) {
         let b = gs.bullets[i];
         b.y += b.vy;
         if (b.y < 0) { gs.bullets.splice(i, 1); continue; }
         
-        // Bullet Hit Enemy
         for (let j = gs.enemies.length - 1; j >= 0; j--) {
           let e = gs.enemies[j];
           if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
             gs.enemies.splice(j, 1);
             gs.bullets.splice(i, 1);
             gs.score += 150;
+            if (gs.score > gs.highScore) gs.highScore = gs.score;
             playExplode();
-            // Explosion particles
             for(let p=0; p<15; p++) {
               gs.particles.push({
                 x: e.x + e.w/2, y: e.y + e.h/2,
-                vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
-                life: 30
+                vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 30
               });
             }
             break;
@@ -296,49 +357,78 @@ const GalagaGame = ({ audioCtx }) => {
         }
       }
 
-      // Enemies Movement
-      let drift = 0.2 + (gs.wave * 0.1); 
-      let hitBottom = false;
-      for (let i = gs.enemies.length - 1; i >= 0; i--) {
-        let e = gs.enemies[i];
-        e.phase += 0.05;
-        e.x = e.baseX + Math.sin(e.phase) * 40;
-        e.y += drift;
-        e.baseY += drift;
-        if (e.y > 600) hitBottom = true;
-
-        // Enemy Hit Player
-        if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
-            e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
-            
-            gs.lives--;
-            playExplode();
-            gs.enemies.splice(i, 1);
-            
-            // Explosion particles for player hit
-            for(let p=0; p<30; p++) {
-              gs.particles.push({
-                x: gs.player.x + gs.player.w/2, y: gs.player.y + gs.player.h/2,
-                vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12,
-                life: 40
-              });
-            }
-
-            if (gs.lives <= 0) {
-              gs.status = 'gameover';
-              playGameOver();
-            }
+      // Enemy Bullets
+      for (let i = gs.enemyBullets.length - 1; i >= 0; i--) {
+        let eb = gs.enemyBullets[i];
+        eb.x += eb.vx; eb.y += eb.vy;
+        if (eb.y > 600 || eb.x < 0 || eb.x > 800) { gs.enemyBullets.splice(i, 1); continue; }
+        
+        if (eb.x < gs.player.x + gs.player.w && eb.x + eb.w > gs.player.x &&
+            eb.y < gs.player.y + gs.player.h && eb.y + eb.h > gs.player.y) {
+            gs.enemyBullets.splice(i, 1);
+            playerHit(gs);
+            break;
         }
       }
 
-      if (hitBottom) {
-        gs.lives--;
-        playExplode();
-        if (gs.lives <= 0) {
-          gs.status = 'gameover';
-          playGameOver();
-        } else {
-          gs.enemies = spawnWave(gs.wave); // Reset wave positions
+      // Enemy Logic
+      let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 80)); 
+      
+      // Randomly pick an enemy to attack
+      if (Math.random() < 0.015 + (gs.wave * 0.002)) {
+        let formEnemies = gs.enemies.filter(e => e.state === 'formation');
+        if(formEnemies.length > 0) {
+          let randE = formEnemies[Math.floor(Math.random() * formEnemies.length)];
+          randE.state = 'attacking';
+          randE.attackStartX = randE.x;
+          randE.attackStartY = randE.y;
+          randE.attackTimer = 0;
+        }
+      }
+
+      for (let i = gs.enemies.length - 1; i >= 0; i--) {
+        let e = gs.enemies[i];
+        
+        if (e.state === 'formation') {
+          e.x = e.baseX + formX;
+          e.y = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
+        } 
+        else if (e.state === 'attacking') {
+          e.attackTimer++;
+          // S-Curve swooping attack pattern
+          e.y = e.attackStartY + (e.attackTimer * (4 + gs.wave * 0.3));
+          e.x = e.attackStartX + Math.sin(e.attackTimer * 0.05) * 100;
+          e.x = Math.max(0, Math.min(800 - e.w, e.x));
+
+          // Shoot at player during dive
+          if (Math.random() < 0.015 + (gs.wave * 0.002)) {
+            fireEnemyBullet(e, gs);
+          }
+
+          // If off bottom screen, loop to top and return
+          if (e.y > 600) {
+            e.y = -50;
+            e.state = 'returning';
+          }
+        } 
+        else if (e.state === 'returning') {
+          let tx = e.baseX + formX;
+          let ty = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
+          e.x += (tx - e.x) * 0.05;
+          e.y += (ty - e.y) * 0.05;
+          // Snap back to formation when close
+          if (Math.abs(e.x - tx) < 5 && Math.abs(e.y - ty) < 5) {
+             e.state = 'formation';
+             e.x = tx; e.y = ty;
+          }
+        }
+
+        // Enemy Hit Player ship collision
+        if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
+            e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
+            
+            playerHit(gs);
+            gs.enemies.splice(i, 1);
         }
       }
 
@@ -349,10 +439,10 @@ const GalagaGame = ({ audioCtx }) => {
         if (p.life <= 0) gs.particles.splice(i, 1);
       }
 
-      // Next Wave
-      if (gs.enemies.length === 0 && gs.status !== 'gameover') {
-        gs.wave++;
-        gs.enemies = spawnWave(gs.wave);
+      // Next Wave Trigger
+      if (gs.enemies.length === 0 && gs.status !== 'gameover' && gs.status !== 'levelcleared') {
+        gs.status = 'levelcleared';
+        playLevelClear();
       }
     };
 
