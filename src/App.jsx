@@ -78,6 +78,25 @@ const buildTracks = async (actx) => {
   }
   const galagaPlayBuf = await o2.startRendering();
 
+  // Bubbly Warp Sequence Track
+  const ow = new WAudioContext(1, 16 * sr, sr);
+  for(let beat=0; beat<32; beat++) {
+    let t = beat * 0.5;
+    let k = ow.createOscillator(); k.type = 'square';
+    k.frequency.setValueAtTime(120, t); k.frequency.exponentialRampToValueAtTime(15, t+0.1);
+    let kg = ow.createGain(); kg.gain.setValueAtTime(0.4, t); kg.gain.linearRampToValueAtTime(0.01, t+0.1);
+    k.connect(kg).connect(ow.destination); k.start(t); k.stop(t+0.1);
+
+    for(let step=0; step<8; step++) {
+      let bt = t + step * 0.0625;
+      let s = ow.createOscillator(); s.type = 'sine';
+      s.frequency.value = [523.25, 659.25, 783.99, 1046.50][step%4] * (beat%2===0?1:1.5);
+      let sg = ow.createGain(); sg.gain.setValueAtTime(0.05, bt); sg.gain.exponentialRampToValueAtTime(0.001, bt+0.05);
+      s.connect(sg).connect(ow.destination); s.start(bt); s.stop(bt+0.05);
+    }
+  }
+  const galagaWarpBuf = await ow.startRendering();
+
   const o3 = new WAudioContext(1, 4 * sr, sr);
   for(let i=0; i<8; i++) {
     let t = i * 0.3;
@@ -225,9 +244,8 @@ const buildTracks = async (actx) => {
   snSrc.connect(snGain).connect(s3.destination); snSrc.start(0);
   const snakeOverBuf = await s3.startRendering();
 
-
   return { 
-    galagaStart: galagaStartBuf, galagaPlay: galagaPlayBuf, galagaOver: galagaOverBuf,
+    galagaStart: galagaStartBuf, galagaPlay: galagaPlayBuf, galagaWarp: galagaWarpBuf, galagaOver: galagaOverBuf,
     commandoStart: commandoStartBuf, commandoPlay: commandoPlayBuf, commandoOver: commandoOverBuf,
     snakeStart: snakeStartBuf, snakePlay: snakePlayBuf, snakeOver: snakeOverBuf
   };
@@ -319,7 +337,7 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
     nextDir: {x: 0, y: -1},
     food: {x: 10, y: 10},
     tickCounter: 0,
-    speed: 8 // Frames per tick
+    speed: 8 
   });
 
   const keys = useRef({});
@@ -375,13 +393,11 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
         return;
       }
 
-      // Draw Play Area Border (offset 40px left, 80px top, 36x24 grid of 20px cells = 720x480)
       ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
       ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
       ctx.strokeRect(38, 78, 724, 484);
       ctx.shadowBlur = 0;
 
-      // Draw Food (Neon Magenta blink)
       if (Math.floor(Date.now() / 200) % 2 === 0) {
           ctx.fillStyle = '#f0f';
           ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
@@ -389,7 +405,6 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
           ctx.shadowBlur = 0;
       }
 
-      // Draw Neon Snake (Green with White head)
       gs.snake.forEach((s, i) => {
           ctx.fillStyle = i === 0 ? '#fff' : '#0f0'; 
           ctx.shadowColor = i === 0 ? '#fff' : '#0f0'; 
@@ -398,7 +413,6 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
       });
       ctx.shadowBlur = 0;
 
-      // UI
       drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 40, 45, '#fff', '24px "VT323", monospace', 'left');
       drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 45, '#fff', '24px "VT323", monospace');
       
@@ -442,14 +456,12 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
           let head = gs.snake[0];
           let next = { x: head.x + gs.dir.x, y: head.y + gs.dir.y };
 
-          // Wall Collision
           if (next.x < 0 || next.x >= 36 || next.y < 0 || next.y >= 24) {
               gs.status = 'gameover';
               window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
               return;
           }
 
-          // Self Collision
           if (gs.snake.some(s => s.x === next.x && s.y === next.y)) {
               gs.status = 'gameover';
               window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
@@ -458,11 +470,10 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
 
           gs.snake.unshift(next);
 
-          // Food Collision
           if (next.x === gs.food.x && next.y === gs.food.y) {
               gs.score += 50;
               if (gs.score > gs.highScore) gs.highScore = gs.score;
-              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); // Increase speed dynamically
+              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); 
               spawnFood(gs);
           } else {
               gs.snake.pop();
@@ -492,6 +503,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
   
   const state = useRef({
     status: 'start', 
+    introTimer: 0,
     score: 0,
     highScore: 0,
     wave: 1,
@@ -537,6 +549,25 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
         let noise = audioCtx.createBufferSource(); noise.buffer = buf;
         let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.3, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.4);
         noise.connect(gain).connect(audioCtx.destination); noise.start(t0);
+      } else if (type === 'siren') {
+        let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, t0); 
+        osc.frequency.linearRampToValueAtTime(700, t0+1.0);
+        osc.frequency.linearRampToValueAtTime(400, t0+2.0);
+        
+        let lfo = audioCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
+        let lfoGain = audioCtx.createGain(); lfoGain.gain.value = 20;
+        lfo.connect(lfoGain).connect(osc.frequency);
+        lfo.start(t0); lfo.stop(t0+2.0);
+
+        let gain = audioCtx.createGain(); 
+        gain.gain.setValueAtTime(0, t0); 
+        gain.gain.linearRampToValueAtTime(0.15, t0+0.2);
+        gain.gain.linearRampToValueAtTime(0.15, t0+1.8);
+        gain.gain.linearRampToValueAtTime(0, t0+2.0);
+
+        osc.connect(gain).connect(audioCtx.destination); 
+        osc.start(t0); osc.stop(t0+2.0);
       }
     };
 
@@ -600,6 +631,13 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
         return;
       }
 
+      if (gs.status === 'wave_intro') {
+        if (Math.floor(Date.now() / 200) % 2 === 0) {
+          drawCRTText(ctx, "WARNING", 400, 250, '#f00', '80px "VT323", monospace');
+          drawCRTText(ctx, "INCOMING NUCLEAR STRIKE", 400, 320, '#f00', '40px "VT323", monospace');
+        }
+      }
+
       gs.cities.forEach(c => {
         if (c.alive) {
           ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
@@ -642,7 +680,6 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       });
       ctx.shadowBlur = 0;
 
-      // UI
       drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
       drawCRTText(ctx, `WAVE: ${gs.wave}`, 400, 30, '#fff', '24px "VT323", monospace');
       
@@ -669,25 +706,39 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       }
 
       if (gs.status === 'start' && keys.current['Enter']) {
-        gs.incoming = spawnWave(1);
-        gs.status = 'playing';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
+        gs.status = 'wave_intro';
+        gs.introTimer = 120;
+        playAudio('siren');
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
       }
       if (gs.status === 'gameover' && keys.current['Enter']) {
         gs.score = 0; gs.wave = 1;
         gs.cities.forEach(c => c.alive = true);
-        gs.incoming = spawnWave(1); gs.outgoing = []; gs.explosions = [];
-        gs.status = 'playing';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
+        gs.outgoing = []; gs.explosions = [];
+        gs.status = 'wave_intro';
+        gs.introTimer = 120;
+        playAudio('siren');
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
       }
       if (gs.status === 'levelcleared' && keys.current['Enter']) {
         gs.wave++;
-        gs.incoming = spawnWave(gs.wave); gs.outgoing = []; gs.explosions = [];
-        gs.status = 'playing';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
+        gs.outgoing = []; gs.explosions = [];
+        gs.status = 'wave_intro';
+        gs.introTimer = 120;
+        playAudio('siren');
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
       }
 
-      if (gs.status !== 'playing') return;
+      if (gs.status === 'wave_intro') {
+        gs.introTimer--;
+        if (gs.introTimer <= 0) {
+            gs.incoming = spawnWave(gs.wave);
+            gs.status = 'playing';
+            window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
+        }
+      }
+
+      if (gs.status !== 'playing' && gs.status !== 'wave_intro') return;
 
       if (keys.current['ArrowLeft'] || keys.current['a']) gs.crosshair.x -= gs.crosshair.speed;
       if (keys.current['ArrowRight'] || keys.current['d']) gs.crosshair.x += gs.crosshair.speed;
@@ -696,7 +747,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       gs.crosshair.x = Math.max(0, Math.min(800, gs.crosshair.x));
       gs.crosshair.y = Math.max(0, Math.min(520, gs.crosshair.y));
 
-      if (keys.current[' '] && Date.now() - gs.lastShot > 300) {
+      if (keys.current[' '] && Date.now() - gs.lastShot > 300 && gs.status === 'playing') {
         gs.outgoing.push({
           sx: 400, sy: 580, tx: gs.crosshair.x, ty: gs.crosshair.y,
           x: 400, y: 580, progress: 0, speed: 0.05
@@ -764,7 +815,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       } else if (gs.incoming.length === 0 && gs.status !== 'levelcleared') {
         gs.status = 'levelcleared';
         gs.score += aliveCities * 500;
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); // stop music
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
       }
     };
 
@@ -796,8 +847,11 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     status: 'start', 
     respawnTimer: 0,
     introTimer: 0,
+    warpTimer: 0,
     score: 0,
     highScore: 0,
+    nextLifeScore: 150000,
+    asteroidsMissed: 0,
     lives: 3,
     wave: 1,
     globalSpeed: 1.0,
@@ -851,12 +905,6 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     const ctx = canvas.getContext('2d');
     let animationFrameId;
 
-    const enemyImgs = [
-      (() => { let img = new Image(); img.src = ASSETS.enemy0; return img; })(),
-      (() => { let img = new Image(); img.src = ASSETS.enemy1; return img; })(),
-      (() => { let img = new Image(); img.src = ASSETS.enemy2; return img; })()
-    ];
-
     const playShoot = () => {
       if (!audioCtx || audioCtx.state !== 'running') return;
       const osc = audioCtx.createOscillator();
@@ -898,6 +946,84 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       noise.start();
     };
 
+    const playPlayerDeath = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      
+      let bufSize = audioCtx.sampleRate * 0.5;
+      let buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+      let data = buf.getChannelData(0);
+      for(let i=0; i<bufSize; i++) data[i] = Math.random()*2-1;
+      let noise = audioCtx.createBufferSource(); noise.buffer = buf;
+      let nFilter = audioCtx.createBiquadFilter(); nFilter.type = 'lowpass'; nFilter.frequency.value = 800;
+      let nGain = audioCtx.createGain(); nGain.gain.setValueAtTime(0.5, t0); nGain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
+      
+      let delay = audioCtx.createDelay(); delay.delayTime.value = 0.15;
+      let feedback = audioCtx.createGain(); feedback.gain.value = 0.4;
+      delay.connect(feedback); feedback.connect(delay);
+      
+      noise.connect(nFilter).connect(nGain);
+      nGain.connect(audioCtx.destination);
+      nGain.connect(delay).connect(audioCtx.destination);
+      noise.start(t0);
+      
+      let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(100, t0); osc.frequency.exponentialRampToValueAtTime(10, t0+0.5);
+      let oGain = audioCtx.createGain(); oGain.gain.setValueAtTime(0.4, t0); oGain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
+      osc.connect(oGain).connect(audioCtx.destination);
+      oGain.connect(delay);
+      osc.start(t0); osc.stop(t0+0.5);
+    };
+
+    const playFanfare = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      [440, 554.37, 659.25, 880].forEach((f, i) => {
+         let osc = audioCtx.createOscillator(); osc.type = 'square'; osc.frequency.value = f;
+         let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0 + i*0.1); gain.gain.linearRampToValueAtTime(0, t0 + i*0.1 + 0.1);
+         osc.connect(gain).connect(audioCtx.destination); osc.start(t0 + i*0.1); osc.stop(t0 + i*0.1 + 0.1);
+      });
+    };
+
+    const playWarpSound = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      let osc = audioCtx.createOscillator(); osc.type = 'sine';
+      osc.frequency.setValueAtTime(100, t0); osc.frequency.exponentialRampToValueAtTime(800, t0+1.5);
+      let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.2, t0); gain.gain.linearRampToValueAtTime(0, t0+1.5);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+1.5);
+    };
+
+    const playAlarm = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      let osc = audioCtx.createOscillator(); osc.type = 'square';
+      osc.frequency.setValueAtTime(800, t0); osc.frequency.setValueAtTime(600, t0+0.15);
+      let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0); gain.gain.setValueAtTime(0, t0+0.3);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+0.3);
+    };
+
+    const playExtraLife = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      [659.25, 880, 1318.51].forEach((f, i) => {
+         let osc = audioCtx.createOscillator(); osc.type = 'square'; osc.frequency.value = f;
+         let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0 + i*0.1); gain.gain.linearRampToValueAtTime(0, t0 + i*0.1 + 0.1);
+         osc.connect(gain).connect(audioCtx.destination); osc.start(t0 + i*0.1); osc.stop(t0 + i*0.1 + 0.1);
+      });
+    };
+
+    const addScore = (gs, pts) => {
+      gs.score += pts;
+      if (gs.score > gs.highScore) gs.highScore = gs.score;
+      if (gs.score >= gs.nextLifeScore) {
+          gs.lives++;
+          playExtraLife();
+          if (gs.nextLifeScore === 150000) gs.nextLifeScore = 450000;
+          else gs.nextLifeScore += 300000;
+      }
+    };
+
     const spawnWave = (waveNum) => {
       const arr = [];
       const rows = Math.min(6, 2 + waveNum);
@@ -911,7 +1037,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       
       for(let r=0; r<rows; r++) {
         for(let c=0; c<cols; c++) {
-          let group = Math.floor((idx / total) * 4); // 4 staggered diagonal entry mini waves
+          let group = Math.floor((idx / total) * 4); 
           
           let startX, startY, ctrlX, ctrlY;
           if (group === 0) { startX = -50; startY = 650; ctrlX = 200; ctrlY = 100; }
@@ -993,7 +1119,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       gs.spaceHeldFrames = 0; 
       gs.cooldownTimer = 0;
       gs.overdriveCount = 0;
-      playExplode();
+      playPlayerDeath();
       
       for(let p=0; p<40; p++) {
         gs.particles.push({
@@ -1003,10 +1129,10 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         });
       }
       gs.enemyBullets = []; 
+      window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
       
       if (gs.lives <= 0) {
         gs.status = 'gameover';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaOver' }));
       } else {
         gs.status = 'respawning';
         gs.respawnTimer = 180; 
@@ -1038,8 +1164,6 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       let gs = state.current;
       
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       let isWarp = gs.globalSpeed > 2.0;
 
@@ -1072,7 +1196,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
 
       let isOverdrive = gs.spaceHeldFrames > 60;
       let isCooldown = gs.cooldownTimer > 0;
-      let playerVisible = (gs.status === 'playing' || gs.status === 'level_intro' || (gs.status === 'respawning' && gs.respawnTimer < 90));
+      let playerVisible = (gs.status === 'playing' || gs.status === 'level_intro' || gs.status === 'warp_transition' || (gs.status === 'respawning' && gs.respawnTimer < 90));
 
       if (playerVisible) {
         ctx.save();
@@ -1081,8 +1205,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         let tilt = gs.player.tilt || 0;
         let thrust = gs.player.thrust !== undefined ? gs.player.thrust : 1;
 
-        // Custom 3D perspective projection for authentic arcade ship tilt
-        let roll = tilt * Math.PI / 2.5; 
+        let roll = tilt * Math.PI / 4; 
         const p = (x, y) => {
             let z = x * Math.sin(roll);
             let x2 = x * Math.cos(roll);
@@ -1117,31 +1240,27 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         const baseShadow = isOverdrive && !isCooldown ? '#f50' : '#fff';
         const baseBlur = isOverdrive && !isCooldown ? 20 : 8;
 
-        // Front Guns
         poly([[-12, 2], [-12, -8], [-9, -8], [-9, 2]], gunColor);
         poly([[9, 2], [9, -8], [12, -8], [12, 2]], gunColor);
 
-        // Thruster Engine Flames
         if (!isCooldown) {
             poly([[-5, 12], [-1, 12], [-1, 15], [-5, 15]], '#ff0', null, '#ff0', 5);
             poly([[1, 12], [5, 12], [5, 15], [1, 15]], '#ff0', null, '#ff0', 5);
 
             let tLen = 15;
             let tCol = '#fa0';
-            if (thrust > 1) { tLen = 22 + Math.random()*6; tCol = '#0ff'; } 
+            if (thrust > 1 || gs.status === 'warp_transition') { tLen = 22 + Math.random()*6; tCol = '#0ff'; } 
             if (thrust < 1) { tLen = 16 + Math.random()*2; tCol = '#f00'; } 
 
             poly([[-4, 15], [-2, 15], [-3, tLen]], tCol, null, tCol, 10);
             poly([[2, 15], [4, 15], [3, tLen]], tCol, null, tCol, 10);
         }
 
-        // Main Angular Chassis
         poly([
             [0,-14], [3,-4], [14,2], [14,10], [5,7], [5,12],
             [-5,12], [-5,7], [-14,10], [-14,2], [-3,-4]
         ], mainColor, '#000', baseShadow, baseBlur);
 
-        // Neon Accents
         poly([[-10, 4], [-4, 6], [-4, 9], [-10, 8]], cyanAccent, null, cyanAccent, 8);
         poly([[4, 6], [10, 4], [10, 8], [4, 9]], redAccent, null, redAccent, 8);
 
@@ -1149,6 +1268,14 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         
         if (isCooldown) {
             drawCRTText(ctx, "OVERHEATED", cx, cy - 25, '#f00', '14px "VT323", monospace');
+        }
+      }
+
+      if (gs.status === 'warp_transition') {
+        if (gs.isAsteroidLevel) {
+          drawCRTText(ctx, `ASTEROID FIELD CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
+        } else {
+          drawCRTText(ctx, `WAVE ${gs.wave} CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
         }
       }
 
@@ -1181,18 +1308,17 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           });
           ctx.shadowBlur = 0;
         } else {
-          const glowColors = ['#f0f', '#f00', '#0f0'];
+          ctx.fillStyle = '#f00'; 
           gs.enemies.forEach(e => {
             if (e.state === 'spawning' && e.spawnDelay > 0) return; 
-            ctx.shadowColor = glowColors[e.type];
+            
+            if (e.type === 0) ctx.fillStyle = '#f0f';
+            else if (e.type === 1) ctx.fillStyle = '#f00';
+            else ctx.fillStyle = '#0f0';
+            
+            ctx.shadowColor = ctx.fillStyle;
             ctx.shadowBlur = 12;
-            const eImg = enemyImgs[e.type];
-            if (eImg && eImg.complete) {
-              ctx.drawImage(eImg, e.x, e.y, e.w, e.h);
-            } else {
-              ctx.fillStyle = glowColors[e.type];
-              ctx.fillRect(e.x, e.y, e.w, e.h);
-            }
+            ctx.fillRect(e.x, e.y, e.w, e.h);
           });
           ctx.shadowBlur = 0;
         }
@@ -1237,16 +1363,6 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
         drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
       }
-
-      if (gs.status === 'levelcleared') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        if (gs.isAsteroidLevel) {
-          drawCRTText(ctx, `ASTEROID FIELD CLEARED!`, 400, 280, '#fa0', '60px "VT323", monospace');
-        } else {
-          drawCRTText(ctx, `WAVE ${gs.wave} CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
-        }
-        drawCRTText(ctx, "PRESS ENTER TO CONTINUE", 400, 350, '#fff', '30px "VT323", monospace');
-      }
     };
 
     const update = () => {
@@ -1258,8 +1374,8 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       }
 
       let targetSpeed = 1.0;
-      if (gs.status === 'level_intro' || gs.isAsteroidLevel || gs.status === 'levelcleared') {
-          targetSpeed = 4.0;
+      if (gs.status === 'level_intro' || gs.isAsteroidLevel || gs.status === 'warp_transition') {
+          targetSpeed = 5.0;
       }
       gs.globalSpeed += (targetSpeed - gs.globalSpeed) * 0.05; 
 
@@ -1271,16 +1387,18 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       if (gs.status === 'start') {
         if (keys.current['Enter']) { 
           gs.status = 'level_intro'; 
-          gs.introTimer = 180;
-          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
+          gs.introTimer = 150;
+          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaWarp' }));
         }
         return;
       }
 
-      if (gs.status === 'levelcleared') {
-        if (keys.current['Enter']) {
+      if (gs.status === 'warp_transition') {
+        gs.warpTimer--;
+        if (gs.warpTimer <= 0) {
           gs.wave++;
           gs.isAsteroidLevel = (gs.wave % 4 === 0);
+          gs.asteroidsMissed = 0;
           if (gs.isAsteroidLevel) {
             gs.asteroids = spawnAsteroids(gs.wave);
             gs.enemies = [];
@@ -1290,8 +1408,9 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           }
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
           gs.status = 'level_intro';
-          gs.introTimer = 180;
-          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
+          gs.introTimer = 150;
+          playWarpSound();
+          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaWarp' }));
         }
         return;
       }
@@ -1299,7 +1418,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       if (gs.status === 'gameover') {
         if (keys.current['Enter']) {
           gs.status = 'level_intro';
-          gs.introTimer = 180;
+          gs.introTimer = 150;
           gs.score = 0; gs.lives = 3; gs.wave = 1;
           gs.isAsteroidLevel = false;
           gs.enemies = spawnWave(gs.wave);
@@ -1307,15 +1426,17 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           gs.player.x = 388; gs.player.y = 530; gs.player.tilt = 0; gs.player.thrust = 1;
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
           gs.spaceHeldFrames = 0; gs.cooldownTimer = 0; gs.overdriveCount = 0;
-          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
+          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaWarp' }));
         }
         return;
       }
 
       if (gs.status === 'level_intro') {
           gs.introTimer--;
+          if (gs.introTimer % 30 === 0) playAlarm();
           if (gs.introTimer <= 0) {
               gs.status = 'playing';
+              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
           }
       }
 
@@ -1328,12 +1449,13 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           gs.player.tilt = 0;
           gs.player.thrust = 1;
           gs.spaceHeldFrames = 0;
+          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
         }
       }
 
-      if (gs.status === 'playing' || gs.status === 'level_intro') {
+      if (gs.status === 'playing' || gs.status === 'level_intro' || gs.status === 'warp_transition') {
         
-        if (keys.current[' '] && gs.cooldownTimer <= 0) {
+        if (keys.current[' '] && gs.cooldownTimer <= 0 && gs.status === 'playing') {
           gs.spaceHeldFrames++;
         } else {
           gs.spaceHeldFrames = Math.max(0, gs.spaceHeldFrames - 2);
@@ -1381,8 +1503,8 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         gs.player.x = Math.max(0, Math.min(800 - gs.player.w, gs.player.x));
         gs.player.y = Math.max(400, Math.min(600 - gs.player.h - 10, gs.player.y));
 
-        if (movingX < 0) gs.player.tilt = Math.max(-1, (gs.player.tilt || 0) - 0.15);
-        else if (movingX > 0) gs.player.tilt = Math.min(1, (gs.player.tilt || 0) + 0.15);
+        if (movingX < 0) gs.player.tilt = Math.max(-0.4, (gs.player.tilt || 0) - 0.08);
+        else if (movingX > 0) gs.player.tilt = Math.min(0.4, (gs.player.tilt || 0) + 0.08);
         else gs.player.tilt = (gs.player.tilt || 0) * 0.8;
 
         if (gs.status === 'playing' && (keys.current[' ']) && gs.cooldownTimer <= 0 && Date.now() - gs.lastShot > fireDelay) {
@@ -1404,8 +1526,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
               if (Math.hypot(b.x - a.x, b.y - a.y) < a.radius) {
                   hit = true;
                   playExplode();
-                  gs.score += 50 * a.size;
-                  if (gs.score > gs.highScore) gs.highScore = gs.score;
+                  addScore(gs, 50 * a.size);
                   
                   for(let p=0; p<10*a.size; p++) {
                       gs.particles.push({
@@ -1435,13 +1556,12 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           } else {
             for (let j = gs.enemies.length - 1; j >= 0; j--) {
               let e = gs.enemies[j];
-              if (e.state === 'spawning') continue; 
+              if (e.state === 'spawning' && e.spawnDelay > 0) continue; 
 
               if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
                 gs.enemies.splice(j, 1);
                 hit = true;
-                gs.score += 150;
-                if (gs.score > gs.highScore) gs.highScore = gs.score;
+                addScore(gs, 150);
                 playExplode();
                 for(let p=0; p<15; p++) {
                   gs.particles.push({
@@ -1562,6 +1682,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           }
 
           if (a.y > 600 + a.radius || a.x < -a.radius || a.x > 800 + a.radius) {
+              gs.asteroidsMissed = (gs.asteroidsMissed || 0) + 1;
               gs.asteroids.splice(i, 1);
           }
         }
@@ -1574,8 +1695,13 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       }
 
       if (gs.status === 'playing' && gs.enemies.length === 0 && gs.asteroids.length === 0) {
-        gs.status = 'levelcleared';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
+        gs.status = 'warp_transition';
+        gs.warpTimer = 90; 
+        playFanfare();
+        if (gs.isAsteroidLevel && gs.asteroidsMissed === 0) {
+            gs.lives++;
+            playExtraLife();
+        }
       }
     };
 
@@ -1590,7 +1716,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
-      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent cursor-none" />
     </div>
   );
 };
@@ -1656,20 +1782,31 @@ export default function App() {
       const noiseSrc = actx.createBufferSource();
       noiseSrc.buffer = noiseBuffer;
       noiseSrc.loop = true;
+      const noiseFilter = actx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.value = 1000;
+      noiseFilter.Q.value = 0.5;
       const noiseGain = actx.createGain();
-      noiseGain.gain.setValueAtTime(0.04, tNow);
-      noiseSrc.connect(noiseGain).connect(actx.destination);
+      noiseGain.gain.setValueAtTime(0.08, tNow);
+      noiseSrc.connect(noiseFilter).connect(noiseGain).connect(actx.destination);
       noiseSrc.start(tNow);
       activeNodesRef.current.push(noiseSrc);
 
       const humOsc = actx.createOscillator();
-      humOsc.type = 'sine';
+      humOsc.type = 'sawtooth'; 
       humOsc.frequency.value = 60;
       const humGain = actx.createGain();
-      humGain.gain.setValueAtTime(0.1, tNow);
+      humGain.gain.setValueAtTime(0.015, tNow);
       humOsc.connect(humGain).connect(actx.destination);
       humOsc.start(tNow);
       activeNodesRef.current.push(humOsc);
+      
+      const easC1 = actx.createOscillator(); easC1.type = 'sine'; easC1.frequency.value = 853;
+      const easC2 = actx.createOscillator(); easC2.type = 'sine'; easC2.frequency.value = 960;
+      const easGain = actx.createGain(); easGain.gain.setValueAtTime(0.005, tNow);
+      easC1.connect(easGain).connect(actx.destination); easC2.connect(easGain).connect(actx.destination);
+      easC1.start(tNow); easC2.start(tNow);
+      activeNodesRef.current.push(easC1, easC2);
 
       const telemetrySrc = actx.createBufferSource();
       telemetrySrc.buffer = createTelemetryBuffer(actx);
@@ -1681,7 +1818,8 @@ export default function App() {
       const textToRead = "dee jay merk one. OPERATING AT THE HIGH-FIDELITY INTERSECTION OF RHYTHM AND PRECISION. A DEFINITIVE ARCHITECT OF THE FLORIDA SOUND, BRIDGING CLASSIC FOUNDATIONS WITH FUTURISTIC CLARITY. ROOTED IN THE 90S PULSE. EVOLVING THROUGH EXPERIMENTAL HIP-HOP, SOULFUL R AND B, LATIN MUSIC, AND DRIVING HOUSE MUSIC. SOUND IS ARCHITECTURE. ENGINEERING IS THE SCIENCE OF EMOTION. HE DOESN'T JUST RECORD MUSIC. HE ENGINEERS THE FUTURE. STAY TUNED.";
       const utterance = new SpeechSynthesisUtterance(textToRead);
       utteranceRef.current = utterance; 
-      utterance.pitch = 0.6;
+      
+      utterance.pitch = 0.2;
       utterance.rate = 0.75;
       
       const voices = window.speechSynthesis.getVoices();
