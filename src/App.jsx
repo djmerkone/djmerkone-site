@@ -184,36 +184,45 @@ const buildTracks = async (actx) => {
 
   // ---------------- SNAKE TRACKS ----------------
   const s1 = new WAudioContext(1, 4 * sr, sr);
-  const nokiaTones = [
-    {f: 1318.51, d: 0.125, s: 0}, {f: 1174.66, d: 0.125, s: 0.125}, {f: 739.99, d: 0.25, s: 0.25}, {f: 830.61, d: 0.25, s: 0.5},
-    {f: 1108.73, d: 0.125, s: 0.75}, {f: 987.77, d: 0.125, s: 0.875}, {f: 587.33, d: 0.25, s: 1.0}, {f: 659.25, d: 0.25, s: 1.25},
-    {f: 987.77, d: 0.125, s: 1.5}, {f: 880.00, d: 0.125, s: 1.625}, {f: 554.37, d: 0.25, s: 1.75}, {f: 659.25, d: 0.25, s: 2.0},
-    {f: 880.00, d: 0.5, s: 2.25}
-  ];
-  nokiaTones.forEach(n => {
-    let osc = s1.createOscillator(); osc.type = 'square'; osc.frequency.value = n.f;
-    let gain = s1.createGain(); gain.gain.setValueAtTime(0.05, n.s); gain.gain.linearRampToValueAtTime(0.001, n.s+n.d-0.01);
-    osc.connect(gain).connect(s1.destination); osc.start(n.s); osc.stop(n.s+n.d);
-  });
+  for(let i=0; i<16; i++) {
+    let t = i * 0.15;
+    let osc = s1.createOscillator(); osc.type = 'square';
+    osc.frequency.value = 220 * Math.pow(1.059463094359, i); 
+    let gain = s1.createGain(); gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t+0.1);
+    osc.connect(gain).connect(s1.destination); osc.start(t); osc.stop(t+0.1);
+  }
   const snakeStartBuf = await s1.startRendering();
 
-  const s2 = new WAudioContext(1, 16 * sr, sr);
-  for(let beat=0; beat<32; beat++) {
-     let t = beat * 0.5;
-     let f = [220, 220, 261.63, 196.00][beat%4]; 
-     for(let i=0; i<2; i++) {
-        let osc = s2.createOscillator(); osc.type = 'square'; osc.frequency.value = f * (i%2===0?1:2);
-        let gain = s2.createGain(); gain.gain.setValueAtTime(0.04, t + i*0.25); gain.gain.exponentialRampToValueAtTime(0.001, t+i*0.25+0.1);
-        osc.connect(gain).connect(s2.destination); osc.start(t+i*0.25); osc.stop(t+i*0.25+0.1);
+  const s2 = new WAudioContext(1, 32 * sr, sr);
+  for(let beat=0; beat<128; beat++) {
+     let t = beat * 0.25; 
+     let osc = s2.createOscillator(); osc.type = 'triangle';
+     let notes = [110, 110, 220, 110, 130.81, 130.81, 261.63, 130.81];
+     osc.frequency.value = notes[beat % 8];
+     let gain = s2.createGain(); gain.gain.setValueAtTime(0.2, t); gain.gain.exponentialRampToValueAtTime(0.01, t+0.2);
+     osc.connect(gain).connect(s2.destination); osc.start(t); osc.stop(t+0.2);
+     
+     if (beat % 2 === 0) {
+       let m = s2.createOscillator(); m.type = 'square';
+       m.frequency.value = notes[(beat+2)%8] * 2;
+       let mg = s2.createGain(); mg.gain.setValueAtTime(0.05, t); mg.gain.exponentialRampToValueAtTime(0.001, t+0.1);
+       m.connect(mg).connect(s2.destination); m.start(t); m.stop(t+0.1);
      }
   }
   const snakePlayBuf = await s2.startRendering();
 
   const s3 = new WAudioContext(1, 2 * sr, sr);
   let s3Osc = s3.createOscillator(); s3Osc.type = 'sawtooth';
-  s3Osc.frequency.setValueAtTime(200, 0); s3Osc.frequency.exponentialRampToValueAtTime(10, 1.0);
-  let s3Gain = s3.createGain(); s3Gain.gain.setValueAtTime(0.1, 0); s3Gain.gain.linearRampToValueAtTime(0.01, 1.0);
+  s3Osc.frequency.setValueAtTime(150, 0); s3Osc.frequency.exponentialRampToValueAtTime(10, 1.0);
+  let s3Gain = s3.createGain(); s3Gain.gain.setValueAtTime(0.2, 0); s3Gain.gain.linearRampToValueAtTime(0.01, 1.0);
   s3Osc.connect(s3Gain).connect(s3.destination); s3Osc.start(0); s3Osc.stop(1.0);
+  
+  let snBuf = s3.createBuffer(1, sr, sr);
+  let snDat = snBuf.getChannelData(0);
+  for(let i=0; i<sr; i++) snDat[i] = Math.random()*2-1;
+  let snSrc = s3.createBufferSource(); snSrc.buffer = snBuf;
+  let snGain = s3.createGain(); snGain.gain.setValueAtTime(0.2, 0); snGain.gain.exponentialRampToValueAtTime(0.01, 1.0);
+  snSrc.connect(snGain).connect(s3.destination); snSrc.start(0);
   const snakeOverBuf = await s3.startRendering();
 
 
@@ -305,7 +314,7 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
     status: 'start', 
     score: 0,
     highScore: 0,
-    snake: [{x: 20, y: 15}, {x: 20, y: 16}, {x: 20, y: 17}],
+    snake: [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}],
     dir: {x: 0, y: -1},
     nextDir: {x: 0, y: -1},
     food: {x: 10, y: 10},
@@ -343,7 +352,7 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
     const spawnFood = (gs) => {
         let newFood;
         while(true) {
-            newFood = { x: Math.floor(Math.random() * 40), y: Math.floor(Math.random() * 30) };
+            newFood = { x: Math.floor(Math.random() * 36), y: Math.floor(Math.random() * 24) };
             let conflict = gs.snake.some(s => s.x === newFood.x && s.y === newFood.y);
             if (!conflict) break;
         }
@@ -355,7 +364,7 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
     const draw = () => {
       let gs = state.current;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (gs.status === 'start') {
@@ -366,27 +375,32 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
         return;
       }
 
-      // Draw Food (Magenta blink)
+      // Draw Play Area Border (offset 40px left, 80px top, 36x24 grid of 20px cells = 720x480)
+      ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
+      ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+      ctx.strokeRect(38, 78, 724, 484);
+      ctx.shadowBlur = 0;
+
+      // Draw Food (Neon Magenta blink)
       if (Math.floor(Date.now() / 200) % 2 === 0) {
           ctx.fillStyle = '#f0f';
           ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
-          ctx.fillRect(gs.food.x * 20 + 2, gs.food.y * 20 + 2, 16, 16);
+          ctx.fillRect(40 + gs.food.x * 20, 80 + gs.food.y * 20, 20, 20);
           ctx.shadowBlur = 0;
       }
 
-      // Draw Snake (Black with green CRT glow)
-      ctx.fillStyle = '#000';
-      ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
+      // Draw Neon Snake (Green with White head)
       gs.snake.forEach((s, i) => {
-          if (i === 0) { ctx.fillStyle = '#111'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15; }
-          else { ctx.fillStyle = '#000'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10; }
-          ctx.fillRect(s.x * 20 + 1, s.y * 20 + 1, 18, 18);
+          ctx.fillStyle = i === 0 ? '#fff' : '#0f0'; 
+          ctx.shadowColor = i === 0 ? '#fff' : '#0f0'; 
+          ctx.shadowBlur = 15;
+          ctx.fillRect(40 + s.x * 20, 80 + s.y * 20, 20, 20);
       });
       ctx.shadowBlur = 0;
 
       // UI
-      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
-      drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 30, '#fff', '24px "VT323", monospace');
+      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 40, 45, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 45, '#fff', '24px "VT323", monospace');
       
       if (gs.status === 'gameover') {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
@@ -412,7 +426,7 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
 
       if (gs.status === 'gameover' && keys.current['Enter']) {
         gs.score = 0; gs.speed = 8;
-        gs.snake = [{x: 20, y: 15}, {x: 20, y: 16}, {x: 20, y: 17}];
+        gs.snake = [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}];
         gs.dir = {x: 0, y: -1}; gs.nextDir = {x: 0, y: -1};
         spawnFood(gs);
         gs.status = 'playing';
@@ -428,11 +442,12 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
           let head = gs.snake[0];
           let next = { x: head.x + gs.dir.x, y: head.y + gs.dir.y };
 
-          // Wrap around walls
-          if (next.x < 0) next.x = 39;
-          if (next.x > 39) next.x = 0;
-          if (next.y < 0) next.y = 29;
-          if (next.y > 29) next.y = 0;
+          // Wall Collision
+          if (next.x < 0 || next.x >= 36 || next.y < 0 || next.y >= 24) {
+              gs.status = 'gameover';
+              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
+              return;
+          }
 
           // Self Collision
           if (gs.snake.some(s => s.x === next.x && s.y === next.y)) {
@@ -447,7 +462,7 @@ const SnakeGame = ({ audioCtx, onMenu }) => {
           if (next.x === gs.food.x && next.y === gs.food.y) {
               gs.score += 50;
               if (gs.score > gs.highScore) gs.highScore = gs.score;
-              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); // Increase speed
+              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); // Increase speed dynamically
               spawnFood(gs);
           } else {
               gs.snake.pop();
@@ -627,6 +642,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       });
       ctx.shadowBlur = 0;
 
+      // UI
       drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
       drawCRTText(ctx, `WAVE: ${gs.wave}`, 400, 30, '#fff', '24px "VT323", monospace');
       
@@ -748,7 +764,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       } else if (gs.incoming.length === 0 && gs.status !== 'levelcleared') {
         gs.status = 'levelcleared';
         gs.score += aliveCities * 500;
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); // stop music
       }
     };
 
@@ -1804,7 +1820,7 @@ export default function App() {
   useEffect(() => {
     if (videoRef.current) {
       if (secretGameState === 'snake') {
-        videoRef.current.src = "/snake.mp4";
+        videoRef.current.src = "/test.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
       } else if (secretGameState === 'commando') {
