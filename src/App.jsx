@@ -150,38 +150,69 @@ const buildTracks = async (actx) => {
   let snSrc = s3.createBufferSource(); snSrc.buffer = snBuf; let snGain = s3.createGain(); snGain.gain.setValueAtTime(0.2, 0); snGain.gain.exponentialRampToValueAtTime(0.01, 1.0); snSrc.connect(snGain).connect(s3.destination); snSrc.start(0);
   const snakeOverBuf = await s3.startRendering();
 
-  // ---------------- DRIVE TRACKS ----------------
+  // ---------------- BASS TURBO (Dreamwave Sax Track) ----------------
   const d1 = new WAudioContext(1, 4 * sr, sr);
   let drvRev = d1.createOscillator(); drvRev.type = 'sawtooth'; drvRev.frequency.setValueAtTime(50, 0); drvRev.frequency.exponentialRampToValueAtTime(250, 3.5);
   let drvGain = d1.createGain(); drvGain.gain.setValueAtTime(0.1, 0); drvGain.gain.linearRampToValueAtTime(0, 4.0);
   drvRev.connect(drvGain).connect(d1.destination); drvRev.start(0); drvRev.stop(4.0);
   const driveStartBuf = await d1.startRendering();
 
-  const d2 = new WAudioContext(1, 64 * sr, sr);
-  const driveChordsMain = [ [110.00, 130.81, 164.81], [87.31, 110.00, 130.81], [65.41, 82.41, 98.00], [98.00, 123.47, 146.83] ];
-  const driveChordsChorus = [ [73.42, 87.31, 110.00], [110.00, 130.81, 164.81], [82.41, 98.00, 123.47], [110.00, 130.81, 164.81] ];
-  for (let beat = 0; beat < 128; beat++) {
-      let t = beat * 0.5;
+  const d2 = new WAudioContext(1, 76.8 * sr, sr); // 32 bars at 100 BPM
+  const driveChordsMain = [ [174.61, 207.65, 261.63], [155.56, 196.00, 233.08], [138.59, 164.81, 207.65], [130.81, 164.81, 196.00] ]; // Fm, Eb, Db, C
+  const driveChordsChorus = [ [207.65, 261.63, 311.13], [174.61, 207.65, 261.63], [155.56, 196.00, 233.08], [130.81, 164.81, 196.00] ]; // Ab, Fm, Eb, C
+
+  for (let beat = 0; beat < 128; beat++) { // 128 beats = 32 bars at 4/4
+      let t = beat * 0.6; // 100 BPM (0.6 sec per beat)
       let barIndex = Math.floor(beat / 4);
-      let isChorus = barIndex >= 24;
+      let isChorus = barIndex >= 24; 
       let chordSet = isChorus ? driveChordsChorus : driveChordsMain;
       let chordIdx = Math.floor((barIndex % 8) / 2);
       let freqs = chordSet[chordIdx];
       
+      // 16th note rolling bass
       for (let step = 0; step < 4; step++) {
-          let bt = t + step * 0.125;
-          let b = d2.createOscillator(); b.type = 'sawtooth'; b.frequency.value = freqs[0] / 2; 
-          let bg = d2.createGain(); bg.gain.setValueAtTime(0.15, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.1);
-          let filter = d2.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(800, bt); filter.frequency.exponentialRampToValueAtTime(100, bt+0.1);
-          b.connect(filter).connect(bg).connect(d2.destination); b.start(bt); b.stop(bt+0.1);
+          let bt = t + step * 0.15;
+          let b = d2.createOscillator(); b.type = 'triangle'; b.frequency.value = freqs[0] / 2; 
+          let bg = d2.createGain(); bg.gain.setValueAtTime(0.3, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.1);
+          b.connect(bg).connect(d2.destination); b.start(bt); b.stop(bt+0.1);
       }
       
-      if (beat % 2 !== 0) {
+      // Chords / Pads (Every 2 beats)
+      if (beat % 2 === 0) {
           freqs.forEach(f => {
-              let c = d2.createOscillator(); c.type = 'square'; c.frequency.value = f * (isChorus ? 2 : 1);
-              let cg = d2.createGain(); cg.gain.setValueAtTime(0.05, t); cg.gain.exponentialRampToValueAtTime(0.01, t+0.4);
-              c.connect(cg).connect(d2.destination); c.start(t); c.stop(t+0.4);
+              let c = d2.createOscillator(); c.type = 'sine'; c.frequency.value = f * 2;
+              let cg = d2.createGain(); cg.gain.setValueAtTime(0.0, t); cg.gain.linearRampToValueAtTime(0.05, t+0.2); cg.gain.exponentialRampToValueAtTime(0.01, t+1.2);
+              c.connect(cg).connect(d2.destination); c.start(t); c.stop(t+1.2);
           });
+      }
+
+      // "Saxophone" Lead Melody (Sawtooth with Vibrato and Lowpass Envelope)
+      if (beat % 4 !== 0 && Math.random() > 0.3) {
+          let saxFreq = freqs[Math.floor(Math.random() * 3)] * 4; // Higher octave
+          let sax = d2.createOscillator(); sax.type = 'sawtooth';
+          
+          let lfo = d2.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 6; // 6Hz vibrato
+          let lfoGain = d2.createGain(); lfoGain.gain.value = 10;
+          lfo.connect(lfoGain).connect(sax.frequency);
+          lfo.start(t); lfo.stop(t+0.6);
+
+          sax.frequency.setValueAtTime(saxFreq - 20, t); // Slight scoop attack
+          sax.frequency.linearRampToValueAtTime(saxFreq, t+0.05);
+
+          let filter = d2.createBiquadFilter(); filter.type = 'lowpass'; 
+          filter.frequency.setValueAtTime(400, t); filter.frequency.linearRampToValueAtTime(2000, t+0.1); filter.frequency.exponentialRampToValueAtTime(400, t+0.5);
+          
+          let saxGain = d2.createGain(); saxGain.gain.setValueAtTime(0, t); saxGain.gain.linearRampToValueAtTime(0.08, t+0.1); saxGain.gain.exponentialRampToValueAtTime(0.01, t+0.5);
+          
+          sax.connect(filter).connect(saxGain).connect(d2.destination); sax.start(t); sax.stop(t+0.6);
+      }
+
+      // Drums
+      if (beat % 2 === 0) {
+          let k = d2.createOscillator(); k.type = 'square'; k.frequency.setValueAtTime(100, t); k.frequency.exponentialRampToValueAtTime(10, t+0.1);
+          let kg = d2.createGain(); kg.gain.setValueAtTime(0.5, t); kg.gain.linearRampToValueAtTime(0.01, t+0.1);
+          k.connect(kg).connect(d2.destination); k.start(t); k.stop(t+0.1);
+      } else {
           playSnare(d2, t, d2.destination);
       }
   }
@@ -280,521 +311,7 @@ const GameMenu = ({ onSelect }) => {
   );
 };
 
-// --- BASS COMMANDO GAME COMPONENT ---
-const CommandoGame = ({ audioCtx, onMenu }) => {
-  const canvasRef = useRef(null);
-  
-  const state = useRef({
-    status: 'start', 
-    introTimer: 0,
-    score: 0,
-    highScore: 0,
-    wave: 1,
-    cities: [100, 220, 340, 460, 580, 700].map(x => ({ x, y: 550, alive: true })),
-    crosshair: { x: 400, y: 300, speed: 8 },
-    incoming: [],
-    outgoing: [],
-    explosions: [],
-    lastShot: 0
-  });
-
-  const keys = useRef({});
-
-  useEffect(() => {
-    const handleKeyDown = e => { keys.current[e.key] = true; };
-    const handleKeyUp = e => { keys.current[e.key] = false; };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-
-    const playAudio = (type) => {
-      if (!audioCtx || audioCtx.state !== 'running') return;
-      const t0 = audioCtx.currentTime;
-      if (type === 'launch') {
-        let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(800, t0); osc.frequency.exponentialRampToValueAtTime(100, t0+0.3);
-        let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.3);
-        osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+0.3);
-      } else if (type === 'boom') {
-        let bufSize = audioCtx.sampleRate * 0.4;
-        let buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
-        let data = buf.getChannelData(0);
-        for(let i=0; i<bufSize; i++) data[i] = Math.random()*2-1;
-        let noise = audioCtx.createBufferSource(); noise.buffer = buf;
-        let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.3, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.4);
-        noise.connect(gain).connect(audioCtx.destination); noise.start(t0);
-      } else if (type === 'siren') {
-        let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(1200, t0); 
-        osc.frequency.linearRampToValueAtTime(1600, t0+1.0);
-        osc.frequency.linearRampToValueAtTime(1200, t0+2.0);
-        
-        let lfo = audioCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
-        let lfoGain = audioCtx.createGain(); lfoGain.gain.value = 20;
-        lfo.connect(lfoGain).connect(osc.frequency);
-        lfo.start(t0); lfo.stop(t0+2.0);
-
-        let gain = audioCtx.createGain(); 
-        gain.gain.setValueAtTime(0, t0); 
-        gain.gain.linearRampToValueAtTime(0.15, t0+0.2);
-        gain.gain.linearRampToValueAtTime(0.15, t0+1.8);
-        gain.gain.linearRampToValueAtTime(0, t0+2.0);
-
-        osc.connect(gain).connect(audioCtx.destination); 
-        osc.start(t0); osc.stop(t0+2.0);
-      }
-    };
-
-    const handleMouseMove = (e) => {
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      state.current.crosshair.x = Math.max(0, Math.min(800, (e.clientX - rect.left) * scaleX));
-      state.current.crosshair.y = Math.max(0, Math.min(520, (e.clientY - rect.top) * scaleY));
-    };
-
-    const handleMouseDown = (e) => {
-      let gs = state.current;
-      if (gs.status === 'playing' && Date.now() - gs.lastShot > 300) {
-        gs.outgoing.push({
-          sx: 400, sy: 580, tx: gs.crosshair.x, ty: gs.crosshair.y,
-          x: 400, y: 580, progress: 0, speed: 0.05
-        });
-        gs.lastShot = Date.now();
-        playAudio('launch');
-      }
-    };
-
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mousedown', handleMouseDown);
-
-    const spawnWave = (wave) => {
-      let count = 5 + wave * 3;
-      let inc = [];
-      for(let i=0; i<count; i++) {
-        let sx = Math.random() * 800;
-        let tx = Math.random() * 800;
-        let aliveCities = state.current.cities.filter(c => c.alive);
-        if (aliveCities.length > 0 && Math.random() > 0.3) {
-          tx = aliveCities[Math.floor(Math.random() * aliveCities.length)].x + 20;
-        }
-        inc.push({
-          sx, sy: 0, tx, ty: 550, x: sx, y: 0,
-          speed: 0.002 + (Math.random() * 0.002) + (wave * 0.0005),
-          progress: -(Math.random() * 2) 
-        });
-      }
-      return inc;
-    };
-
-    const formatScore = (s) => String(s).padStart(6, '0');
-
-    const draw = () => {
-      let gs = state.current;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      if (gs.status === 'start') {
-        drawCRTText(ctx, "BASS COMMANDO", 400, 250, '#0ff', '60px "VT323", monospace');
-        drawCRTText(ctx, "DEFEND THE SECTOR", 400, 300, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 420, '#fff', '20px "VT323", monospace');
-        drawCRTText(ctx, "MOUSE: Aim  |  CLICK: Shoot", 400, 470, '#fff', '20px "VT323", monospace');
-        return;
-      }
-
-      if (gs.status === 'wave_intro') {
-        if (Math.floor(Date.now() / 200) % 2 === 0) {
-          drawCRTText(ctx, "WARNING", 400, 250, '#f00', '80px "VT323", monospace');
-          drawCRTText(ctx, "INCOMING NUCLEAR STRIKE", 400, 320, '#f00', '40px "VT323", monospace');
-        }
-      }
-
-      gs.cities.forEach(c => {
-        if (c.alive) {
-          ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-          ctx.fillRect(c.x, c.y, 40, 20);
-          ctx.fillRect(c.x + 10, c.y - 10, 20, 10);
-        } else {
-          ctx.fillStyle = '#333'; ctx.shadowBlur = 0;
-          ctx.fillRect(c.x, c.y + 10, 40, 10);
-        }
-      });
-      ctx.shadowBlur = 0;
-
-      ctx.strokeStyle = '#0f0'; ctx.lineWidth = 2; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.moveTo(gs.crosshair.x - 10, gs.crosshair.y); ctx.lineTo(gs.crosshair.x + 10, gs.crosshair.y);
-      ctx.moveTo(gs.crosshair.x, gs.crosshair.y - 10); ctx.lineTo(gs.crosshair.x, gs.crosshair.y + 10);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      ctx.strokeStyle = '#f0f'; ctx.lineWidth = 2; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 8;
-      gs.incoming.forEach(m => {
-        if (m.progress > 0) {
-          ctx.beginPath(); ctx.moveTo(m.sx, m.sy); ctx.lineTo(m.x, m.y); ctx.stroke();
-          ctx.fillStyle = '#fff'; ctx.fillRect(m.x - 2, m.y - 2, 4, 4);
-        }
-      });
-      ctx.shadowBlur = 0;
-
-      ctx.strokeStyle = '#ff0'; ctx.lineWidth = 2; ctx.shadowColor = '#ff0'; ctx.shadowBlur = 8;
-      gs.outgoing.forEach(m => {
-        ctx.beginPath(); ctx.moveTo(m.sx, m.sy); ctx.lineTo(m.x, m.y); ctx.stroke();
-        ctx.fillStyle = '#fff'; ctx.fillRect(m.x - 2, m.y - 2, 4, 4);
-      });
-      ctx.shadowBlur = 0;
-
-      gs.explosions.forEach(exp => {
-        ctx.fillStyle = `rgba(255, 255, 255, ${exp.life / 60})`;
-        ctx.shadowColor = '#0ff'; ctx.shadowBlur = 20;
-        ctx.beginPath(); ctx.arc(exp.x, exp.y, exp.r, 0, Math.PI * 2); ctx.fill();
-      });
-      ctx.shadowBlur = 0;
-
-      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
-      drawCRTText(ctx, `WAVE: ${gs.wave}`, 400, 30, '#fff', '24px "VT323", monospace');
-      
-      if (gs.status === 'gameover') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(ctx, "SYSTEM FAILURE", 400, 280, '#f00', '80px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
-      }
-
-      if (gs.status === 'levelcleared') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(ctx, `SECTOR ${gs.wave} SECURED`, 400, 280, '#0ff', '60px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO CONTINUE", 400, 350, '#fff', '30px "VT323", monospace');
-      }
-    };
-
-    const update = () => {
-      let gs = state.current;
-
-      if (keys.current['m'] || keys.current['M']) {
-        onMenu();
-        return;
-      }
-
-      if (gs.status === 'start' && keys.current['Enter']) {
-        gs.status = 'wave_intro';
-        gs.introTimer = 120;
-        playAudio('siren');
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
-      }
-      if (gs.status === 'gameover' && keys.current['Enter']) {
-        gs.score = 0; gs.wave = 1;
-        gs.cities.forEach(c => c.alive = true);
-        gs.outgoing = []; gs.explosions = [];
-        gs.status = 'wave_intro';
-        gs.introTimer = 120;
-        playAudio('siren');
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
-      }
-      if (gs.status === 'levelcleared' && keys.current['Enter']) {
-        gs.wave++;
-        gs.outgoing = []; gs.explosions = [];
-        gs.status = 'wave_intro';
-        gs.introTimer = 120;
-        playAudio('siren');
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
-      }
-
-      if (gs.status === 'wave_intro') {
-        gs.introTimer--;
-        if (gs.introTimer <= 0) {
-            gs.incoming = spawnWave(gs.wave);
-            gs.status = 'playing';
-            window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoPlay' }));
-        }
-      }
-
-      if (gs.status !== 'playing' && gs.status !== 'wave_intro') return;
-
-      if (keys.current['ArrowLeft'] || keys.current['a']) gs.crosshair.x -= gs.crosshair.speed;
-      if (keys.current['ArrowRight'] || keys.current['d']) gs.crosshair.x += gs.crosshair.speed;
-      if (keys.current['ArrowUp'] || keys.current['w']) gs.crosshair.y -= gs.crosshair.speed;
-      if (keys.current['ArrowDown'] || keys.current['s']) gs.crosshair.y += gs.crosshair.speed;
-      gs.crosshair.x = Math.max(0, Math.min(800, gs.crosshair.x));
-      gs.crosshair.y = Math.max(0, Math.min(520, gs.crosshair.y));
-
-      if (keys.current[' '] && Date.now() - gs.lastShot > 300 && gs.status === 'playing') {
-        gs.outgoing.push({
-          sx: 400, sy: 580, tx: gs.crosshair.x, ty: gs.crosshair.y,
-          x: 400, y: 580, progress: 0, speed: 0.05
-        });
-        gs.lastShot = Date.now();
-        playAudio('launch');
-      }
-
-      for (let i = gs.outgoing.length - 1; i >= 0; i--) {
-        let m = gs.outgoing[i];
-        m.progress += m.speed;
-        m.x = m.sx + (m.tx - m.sx) * m.progress;
-        m.y = m.sy + (m.ty - m.sy) * m.progress;
-        if (m.progress >= 1) {
-          gs.explosions.push({ x: m.tx, y: m.ty, r: 0, maxR: 45, life: 60 });
-          gs.outgoing.splice(i, 1);
-          playAudio('boom');
-        }
-      }
-
-      for (let i = gs.explosions.length - 1; i >= 0; i--) {
-        let exp = gs.explosions[i];
-        if (exp.life > 30) exp.r += (exp.maxR - exp.r) * 0.1;
-        exp.life--;
-        if (exp.life <= 0) gs.explosions.splice(i, 1);
-      }
-
-      for (let i = gs.incoming.length - 1; i >= 0; i--) {
-        let m = gs.incoming[i];
-        m.progress += m.speed;
-        if (m.progress > 0) {
-          m.x = m.sx + (m.tx - m.sx) * m.progress;
-          m.y = m.sy + (m.ty - m.sy) * m.progress;
-          
-          let destroyed = false;
-          for (let j = 0; j < gs.explosions.length; j++) {
-            let exp = gs.explosions[j];
-            let dist = Math.hypot(m.x - exp.x, m.y - exp.y);
-            if (dist < exp.r) {
-              destroyed = true; gs.score += 100;
-              gs.explosions.push({ x: m.x, y: m.y, r: 0, maxR: 20, life: 30 });
-              playAudio('boom');
-              break;
-            }
-          }
-
-          if (destroyed) { gs.incoming.splice(i, 1); continue; }
-
-          if (m.progress >= 1) {
-            gs.explosions.push({ x: m.x, y: m.y, r: 0, maxR: 30, life: 40 });
-            playAudio('boom');
-            gs.cities.forEach(c => {
-              if (c.alive && Math.abs(c.x + 20 - m.x) < 30) c.alive = false;
-            });
-            gs.incoming.splice(i, 1);
-          }
-        }
-      }
-
-      let aliveCities = gs.cities.filter(c => c.alive).length;
-      if (aliveCities === 0 && gs.status !== 'gameover') {
-        gs.status = 'gameover';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoOver' }));
-      } else if (gs.status === 'playing' && gs.incoming.length === 0 && gs.status !== 'levelcleared') {
-        gs.status = 'levelcleared';
-        gs.score += aliveCities * 500;
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
-      }
-    };
-
-    const loop = () => {
-      update(); draw();
-      animationFrameId = requestAnimationFrame(loop);
-    };
-    loop();
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mousedown', handleMouseDown);
-    };
-  }, [audioCtx, onMenu]);
-
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
-      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent cursor-none" />
-    </div>
-  );
-};
-
-// --- BASS SNAKE GAME COMPONENT ---
-const SnakeGame = ({ audioCtx, onMenu }) => {
-  const canvasRef = useRef(null);
-  
-  const state = useRef({
-    status: 'start', 
-    score: 0,
-    highScore: 0,
-    snake: [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}],
-    dir: {x: 0, y: -1},
-    nextDir: {x: 0, y: -1},
-    food: {x: 10, y: 10},
-    tickCounter: 0,
-    speed: 8 
-  });
-
-  const keys = useRef({});
-
-  useEffect(() => {
-    const handleKeyDown = e => { 
-        keys.current[e.key] = true; 
-        let sd = state.current.dir;
-        let snd = state.current.nextDir;
-        if ((e.key === 'ArrowUp' || e.key === 'w') && sd.y === 0) snd = {x: 0, y: -1};
-        if ((e.key === 'ArrowDown' || e.key === 's') && sd.y === 0) snd = {x: 0, y: 1};
-        if ((e.key === 'ArrowLeft' || e.key === 'a') && sd.x === 0) snd = {x: -1, y: 0};
-        if ((e.key === 'ArrowRight' || e.key === 'd') && sd.x === 0) snd = {x: 1, y: 0};
-        state.current.nextDir = snd;
-    };
-    const handleKeyUp = e => { keys.current[e.key] = false; };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-
-    const spawnFood = (gs) => {
-        let newFood;
-        while(true) {
-            newFood = { x: Math.floor(Math.random() * 36), y: Math.floor(Math.random() * 24) };
-            let conflict = gs.snake.some(s => s.x === newFood.x && s.y === newFood.y);
-            if (!conflict) break;
-        }
-        gs.food = newFood;
-    };
-
-    const formatScore = (s) => String(s).padStart(6, '0');
-
-    const draw = () => {
-      let gs = state.current;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      if (gs.status === 'start') {
-        drawCRTText(ctx, "BASS SNAKE", 400, 250, '#0f0', '60px "VT323", monospace');
-        drawCRTText(ctx, "NOKIA CLASSIC MODULE", 400, 300, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 420, '#fff', '20px "VT323", monospace');
-        return;
-      }
-
-      ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
-      ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-      ctx.strokeRect(38, 78, 724, 484);
-      ctx.shadowBlur = 0;
-
-      if (Math.floor(Date.now() / 200) % 2 === 0) {
-          ctx.fillStyle = '#f0f';
-          ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
-          ctx.fillRect(40 + gs.food.x * 20, 80 + gs.food.y * 20, 20, 20);
-          ctx.shadowBlur = 0;
-      }
-
-      gs.snake.forEach((s, i) => {
-          ctx.fillStyle = i === 0 ? '#fff' : '#0f0'; 
-          ctx.shadowColor = i === 0 ? '#fff' : '#0f0'; 
-          ctx.shadowBlur = 15;
-          ctx.fillRect(40 + s.x * 20, 80 + s.y * 20, 20, 20);
-      });
-      ctx.shadowBlur = 0;
-
-      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 40, 45, '#fff', '24px "VT323", monospace', 'left');
-      drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 45, '#fff', '24px "VT323", monospace');
-      
-      if (gs.status === 'gameover') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(ctx, "GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
-      }
-    };
-
-    const update = () => {
-      let gs = state.current;
-
-      if (keys.current['m'] || keys.current['M']) {
-        onMenu();
-        return;
-      }
-
-      if (gs.status === 'start' && keys.current['Enter']) {
-        gs.status = 'playing';
-        spawnFood(gs);
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
-      }
-
-      if (gs.status === 'gameover' && keys.current['Enter']) {
-        gs.score = 0; gs.speed = 8;
-        gs.snake = [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}];
-        gs.dir = {x: 0, y: -1}; gs.nextDir = {x: 0, y: -1};
-        spawnFood(gs);
-        gs.status = 'playing';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
-      }
-
-      if (gs.status !== 'playing') return;
-
-      gs.tickCounter++;
-      if (gs.tickCounter >= gs.speed) {
-          gs.tickCounter = 0;
-          gs.dir = gs.nextDir;
-          let head = gs.snake[0];
-          let next = { x: head.x + gs.dir.x, y: head.y + gs.dir.y };
-
-          if (next.x < 0 || next.x >= 36 || next.y < 0 || next.y >= 24) {
-              gs.status = 'gameover';
-              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
-              return;
-          }
-
-          if (gs.snake.some(s => s.x === next.x && s.y === next.y)) {
-              gs.status = 'gameover';
-              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
-              return;
-          }
-
-          gs.snake.unshift(next);
-
-          if (next.x === gs.food.x && next.y === gs.food.y) {
-              gs.score += 50;
-              if (gs.score > gs.highScore) gs.highScore = gs.score;
-              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); 
-              spawnFood(gs);
-          } else {
-              gs.snake.pop();
-          }
-      }
-    };
-
-    const loop = () => {
-      update(); draw();
-      animationFrameId = requestAnimationFrame(loop);
-    };
-    loop();
-
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [audioCtx, onMenu]);
-
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
-      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
-    </div>
-  );
-};
-
-// --- BASS TURBO (DRIVING SIMULATOR) ---
+// --- BASS TURBO (PSEUDO-3D RETRO WAVE SIMULATOR) ---
 const DriveGame = ({ audioCtx, onMenu }) => {
   const canvasRef = useRef(null);
   
@@ -804,9 +321,10 @@ const DriveGame = ({ audioCtx, onMenu }) => {
     highScore: 0,
     wave: 1,
     speed: 0,
-    maxSpeed: 50,
+    maxSpeed: 80,
     trackZ: 0,
-    playerX: 400,
+    playerX: 0, 
+    steerAngle: 0,
     objects: [],
     levelTimer: 0,
     noCrashTimer: 0,
@@ -867,27 +385,31 @@ const DriveGame = ({ audioCtx, onMenu }) => {
       });
     };
 
+    const getTrackCurve = (z) => {
+        // Generates a meandering curve for the road based on Z distance
+        return Math.sin(z * 0.0005) * 1000 + Math.sin(z * 0.001) * 800;
+    };
+
     const spawnObjects = (gs) => {
         let isObstacle = Math.random() < 0.6; 
+        let spawnZ = gs.trackZ + 15000; 
+
         if (isObstacle) {
-            let lanes = [250, 350, 450, 550];
+            let lanes = [-1125, -375, 375, 1125]; 
             let laneX = lanes[Math.floor(Math.random() * lanes.length)];
             
-            let conflict = gs.objects.some(o => o.x === laneX && o.y < 0);
-            if (!conflict) {
-                gs.objects.push({
-                    y: -100,
-                    x: laneX,
-                    type: Math.random() < 0.3 ? 'moto' : 'car',
-                    baseSpeed: 15 + Math.random() * 15, 
-                    color: ['#0ff', '#ff0', '#f0f', '#0f0'][Math.floor(Math.random()*4)]
-                });
-            }
+            gs.objects.push({
+                z: spawnZ,
+                x: laneX,
+                type: Math.random() < 0.3 ? 'moto' : 'car',
+                baseSpeed: gs.maxSpeed - (1 + Math.random() * 2), // 2-3 mph slower than player
+                color: ['#0ff', '#f0f'][Math.floor(Math.random()*2)]
+            });
         } else {
             let isLeft = Math.random() > 0.5;
-            let xOffset = isLeft ? 50 + Math.random() * 100 : 650 + Math.random() * 100;
+            let xOffset = isLeft ? (-2000 - Math.random() * 2000) : (2000 + Math.random() * 2000);
             gs.objects.push({
-                y: -100,
+                z: spawnZ,
                 x: xOffset,
                 type: Math.random() < 0.5 ? 'tree' : 'house',
                 baseSpeed: 0 
@@ -902,155 +424,267 @@ const DriveGame = ({ audioCtx, onMenu }) => {
         return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     };
 
-    const drawCar = (ctx, color, isPlayer = false, isMoto = false) => {
-        ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 15;
-        
-        if (isMoto) {
-            ctx.fillRect(-10, -20, 20, 40);
-            ctx.fillStyle = '#fff'; ctx.shadowBlur = 0;
-            ctx.fillRect(-5, -20, 10, 5); 
-            ctx.fillStyle = '#f00'; 
-            ctx.fillRect(-5, 15, 10, 5); 
-        } else {
-            ctx.fillRect(-20, -40, 40, 80);
-            ctx.fillStyle = '#000'; ctx.shadowBlur = 0;
-            ctx.fillRect(-15, -20, 30, 20); 
-            ctx.fillRect(-15, 20, 30, 15);  
-            ctx.fillStyle = isPlayer ? '#fff' : '#ff0';
-            ctx.fillRect(-18, -40, 8, 4); 
-            ctx.fillRect(10, -40, 8, 4);
-            ctx.fillStyle = '#f00';
-            ctx.fillRect(-18, 36, 10, 4); 
-            ctx.fillRect(8, 36, 10, 4);
-        }
-    };
-
     const draw = () => {
       let gs = state.current;
       
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // --- SKY & HORIZON ---
+      let skyGrad = ctx.createLinearGradient(0, 0, 0, 220);
+      skyGrad.addColorStop(0, '#100030');
+      skyGrad.addColorStop(1, '#a00060');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, 800, 220);
+
+      // Distant City
+      let cityPan = (-gs.playerX * 0.01) % 800;
+      ctx.fillStyle = '#000044';
+      ctx.shadowColor = '#00f'; ctx.shadowBlur = 10;
+      for (let i = -1; i < 2; i++) {
+         let cx = cityPan + i * 800;
+         ctx.fillRect(cx + 100, 120, 80, 100);
+         ctx.fillRect(cx + 220, 150, 60, 70);
+         ctx.fillRect(cx + 350, 80, 100, 140);
+         ctx.fillRect(cx + 500, 140, 70, 80);
+         ctx.fillRect(cx + 650, 100, 90, 120);
+      }
+      ctx.shadowBlur = 0;
+
+      // Twinkling City Lights
+      ctx.fillStyle = '#ff0';
+      for(let i=0; i<20; i++) {
+         if (Math.floor(Date.now() / (100 + i*50)) % 2 === 0) {
+             let lx = (cityPan + i * 150) % 800;
+             if(lx < 0) lx += 800;
+             ctx.fillRect(lx, 150 + (i*7)%50, 4, 4);
+         }
+      }
+
+      // Retro Sun
+      ctx.save();
+      let sunGrad = ctx.createLinearGradient(0, 80, 0, 220);
+      sunGrad.addColorStop(0, '#ff0');
+      sunGrad.addColorStop(1, '#f0f');
+      ctx.fillStyle = sunGrad;
+      ctx.shadowColor = '#f0f'; ctx.shadowBlur = 40;
+      ctx.beginPath(); ctx.arc(400, 160, 60, 0, Math.PI*2); ctx.fill();
+      ctx.shadowBlur = 0;
+      // Sun Cutouts
+      ctx.globalCompositeOperation = 'destination-out';
+      for(let i=0; i<6; i++) {
+         ctx.fillRect(300, 180 + i*8, 200, 2 + i*1.5);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.restore();
 
       if (gs.status === 'start') {
-        drawCRTText(ctx, "BASS TURBO", 400, 200, '#f0f', '60px "VT323", monospace');
-        drawCRTText(ctx, "NEON HIGHWAY SIMULATOR", 400, 260, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO START", 400, 360, '#fff', '24px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '20px "VT323", monospace');
-        drawCRTText(ctx, "A/D/ARROWS: Steer  |  NUMPAD +: Gas  |  NUMPAD 0: Brake", 400, 460, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "BASS TURBO", 400, 100, '#f0f', '60px "VT323", monospace');
+        drawCRTText(ctx, "MIAMI NEON HIGHWAY", 400, 160, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO START", 400, 280, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 320, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "A/D/ARROWS: Steer  |  NUMPAD +/W: Gas  |  NUMPAD 0/S: Brake", 400, 380, '#fff', '20px "VT323", monospace');
         return;
       }
 
-      ctx.strokeStyle = '#ff0'; 
-      ctx.lineWidth = 6;
-      ctx.shadowColor = '#ff0';
-      ctx.shadowBlur = 15;
-      ctx.beginPath(); ctx.moveTo(200, 0); ctx.lineTo(200, 600); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(600, 0); ctx.lineTo(600, 600); ctx.stroke();
+      // --- PSEUDO-3D ROAD ---
+      const horizonY = 220;
+      const roadW_World = 3000;
+      const fov = 0.15;
+      
+      let basePlayerOffset = getTrackCurve(gs.trackZ);
 
-      ctx.strokeStyle = '#fff'; 
-      ctx.lineWidth = 4; 
-      ctx.shadowColor = '#fff'; 
-      ctx.shadowBlur = 10;
-      ctx.setLineDash([40, 40]); 
-      ctx.lineDashOffset = -gs.trackZ;
-      [300, 400, 500].forEach(lx => {
-          ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, 600); ctx.stroke();
-      });
-      ctx.setLineDash([]); 
-      ctx.shadowBlur = 0;
+      for (let y = 479; y >= horizonY; y -= (y > 350 ? 2 : 1)) {
+          let perspective = (y - horizonY) / 260; // 0 to 1
+          if (perspective <= 0) continue;
+          
+          let z = 1000 / perspective; 
+          let worldZ = gs.trackZ + z;
+          
+          let seg = Math.floor(worldZ / 200); 
+          let isDark = seg % 2 === 0;
+          
+          let curveOffset = getTrackCurve(worldZ) - basePlayerOffset;
+          let screenX = 400 + (curveOffset - gs.playerX) * perspective * fov;
+          let screenW = roadW_World * perspective * fov;
+          
+          // Ground Grid
+          ctx.fillStyle = isDark ? '#1a0033' : '#2a0044'; 
+          ctx.fillRect(0, y, 800, (y > 350 ? 2 : 1));
+          
+          // Grid Lines
+          if (seg % 4 === 0) {
+              ctx.fillStyle = '#f0f';
+              ctx.fillRect(0, y, 800, 1);
+          }
 
+          // Road Surface
+          ctx.fillStyle = isDark ? '#111' : '#222';
+          ctx.fillRect(screenX - screenW/2, y, screenW, (y > 350 ? 2 : 1));
+          
+          // Rumble Strips (Yellow Edges)
+          ctx.fillStyle = isDark ? '#aa0' : '#ff0';
+          let rumbleW = 150 * perspective * fov;
+          ctx.fillRect(screenX - screenW/2 - rumbleW, y, rumbleW, (y > 350 ? 2 : 1));
+          ctx.fillRect(screenX + screenW/2, y, rumbleW, (y > 350 ? 2 : 1));
+          
+          // Dashed Center Lanes (White)
+          if (seg % 4 === 0 || seg % 4 === 1) {
+              ctx.fillStyle = '#fff';
+              let laneW = screenW / 4;
+              for(let l=1; l<4; l++) {
+                  let lx = screenX - screenW/2 + l*laneW;
+                  ctx.fillRect(lx - 2, y, 4, (y > 350 ? 2 : 1));
+              }
+          }
+      }
+
+      // --- SCENERY & OBJECTS (Sorted Back to Front) ---
+      let drawObjects = [];
       gs.objects.forEach(obj => {
+          let dz = obj.z - gs.trackZ;
+          if (dz > 10 && dz < 20000) {
+              let scale = 1000 / dz;
+              let screenY = horizonY + scale * 260;
+              let curveOffset = getTrackCurve(obj.z) - basePlayerOffset;
+              let screenX = 400 + (curveOffset + obj.x - gs.playerX) * scale * fov;
+              drawObjects.push({...obj, sx: screenX, sy: screenY, scale: scale});
+          }
+      });
+      
+      drawObjects.sort((a, b) => a.scale - b.scale);
+
+      drawObjects.forEach(obj => {
           ctx.save();
-          ctx.translate(obj.x, obj.y);
+          ctx.translate(obj.sx, obj.sy);
+          ctx.scale(obj.scale * 3, obj.scale * 3); // Base asset scaling
+          
           if (obj.type === 'tree') {
+              let sway = Math.sin(Date.now() / 500 + obj.z) * 10;
               ctx.fillStyle = '#0f0'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
-              ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(-20, 10); ctx.lineTo(20, 10); ctx.fill();
-              ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(-25, 30); ctx.lineTo(25, 30); ctx.fill();
-              ctx.fillStyle = '#050'; ctx.shadowBlur = 0; ctx.fillRect(-5, 30, 10, 10);
+              // Palm tree leaves
+              ctx.beginPath(); ctx.moveTo(sway, -80); ctx.lineTo(-40, -20); ctx.lineTo(40, -20); ctx.fill();
+              ctx.beginPath(); ctx.moveTo(sway, -50); ctx.lineTo(-50, 10); ctx.lineTo(50, 10); ctx.fill();
+              ctx.fillStyle = '#050'; ctx.shadowBlur = 0; ctx.fillRect(-5, 0, 10, 40); // Trunk
           } else if (obj.type === 'house') {
               ctx.fillStyle = '#00f'; ctx.shadowColor = '#00f'; ctx.shadowBlur = 10;
-              ctx.fillRect(-30, -20, 60, 40);
+              ctx.fillRect(-30, -60, 60, 60);
               ctx.fillStyle = '#0ff'; ctx.shadowBlur = 0;
-              ctx.beginPath(); ctx.moveTo(-35, -20); ctx.lineTo(0, -40); ctx.lineTo(35, -20); ctx.fill();
-              ctx.fillStyle = '#ff0'; ctx.fillRect(-10, -5, 20, 10); 
-          } else if (obj.type === 'car') {
-              drawCar(ctx, obj.color, false, false);
-          } else if (obj.type === 'moto') {
-              drawCar(ctx, obj.color, false, true);
+              ctx.beginPath(); ctx.moveTo(-35, -60); ctx.lineTo(0, -90); ctx.lineTo(35, -60); ctx.fill();
+              ctx.fillStyle = '#ff0'; ctx.fillRect(-10, -30, 20, 15); // Window
+          } else if (obj.type === 'car' || obj.type === 'moto') {
+              ctx.fillStyle = obj.color; ctx.shadowColor = obj.color; ctx.shadowBlur = 15;
+              let cw = obj.type === 'car' ? 60 : 30;
+              let ch = obj.type === 'car' ? 30 : 40;
+              ctx.fillRect(-cw/2, -ch, cw, ch);
+              
+              // Windows & Taillights
+              ctx.fillStyle = '#000'; ctx.shadowBlur = 0;
+              ctx.fillRect(-cw/2 + 5, -ch + 5, cw - 10, ch/2);
+              ctx.fillStyle = '#f00'; 
+              ctx.fillRect(-cw/2 + 5, -5, 10, 4);
+              ctx.fillRect(cw/2 - 15, -5, 10, 4);
           }
           ctx.restore();
       });
 
-      if (gs.status === 'transition_red' || gs.status === 'transition_green') {
-          ctx.fillStyle = '#111';
-          ctx.fillRect(0, 150, 800, 100);
-          ctx.strokeStyle = '#ff0'; ctx.shadowColor = '#ff0'; ctx.shadowBlur = 10;
-          ctx.beginPath(); ctx.moveTo(0, 150); ctx.lineTo(800, 150); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(800, 250); ctx.stroke();
-          ctx.shadowBlur = 0;
-
-          if (gs.trafficLight === 'red') {
-               let ctOffset = (Date.now() / 5) % 1200;
-               ctx.save();
-               ctx.translate(ctOffset - 200, 180);
-               ctx.rotate(Math.PI / 2);
-               drawCar(ctx, '#0ff', false, false);
-               ctx.restore();
-               
-               ctx.save();
-               ctx.translate(1000 - ctOffset, 220);
-               ctx.rotate(-Math.PI / 2);
-               drawCar(ctx, '#f0f', false, false);
-               ctx.restore();
+      // --- PLAYER CAR ---
+      if (gs.status === 'playing' || gs.status === 'transition_red') {
+          ctx.save();
+          // Fixed player position at bottom center
+          ctx.translate(400, 470);
+          
+          let tilt = 0;
+          if (gs.speed > 0) {
+             if (keys.current['ArrowLeft'] || keys.current['a']) tilt = -0.15;
+             if (keys.current['ArrowRight'] || keys.current['d']) tilt = 0.15;
           }
+          ctx.transform(1, 0, tilt, 1, 0, 0); // Bank left/right
 
-          ctx.fillStyle = '#222'; ctx.fillRect(350, 50, 100, 250);
+          ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 20;
+          ctx.beginPath(); ctx.moveTo(-60, 0); ctx.lineTo(-40, -40); ctx.lineTo(40, -40); ctx.lineTo(60, 0); ctx.fill(); // Chassis
+          
+          ctx.fillStyle = '#111'; ctx.shadowBlur = 0;
+          ctx.beginPath(); ctx.moveTo(-40, -5); ctx.lineTo(-30, -30); ctx.lineTo(30, -30); ctx.lineTo(40, -5); ctx.fill(); // Rear Window
+
+          // Brake lights
+          let isBraking = keys.current['Numpad0'] || keys.current['0'] || keys.current['ArrowDown'] || keys.current['s'];
+          ctx.fillStyle = isBraking ? '#fff' : '#800';
+          ctx.shadowColor = '#f00'; ctx.shadowBlur = isBraking ? 30 : 0;
+          ctx.fillRect(-55, -10, 20, 8);
+          ctx.fillRect(35, -10, 20, 8);
+
+          // Exhaust Flame
+          if (gs.speed > 20 && !isBraking) {
+             ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15;
+             ctx.fillRect(-25, 0, 10, 10 + Math.random()*10);
+             ctx.fillRect(15, 0, 10, 10 + Math.random()*10);
+          }
+          ctx.restore();
+      }
+
+      // --- DASHBOARD UI ---
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 480, 800, 120);
+      ctx.strokeStyle = '#f0f'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(0, 480); ctx.lineTo(800, 480); ctx.stroke();
+
+      drawCRTText(ctx, `SCORE`, 100, 520, '#fa0', '20px "VT323", monospace', 'center');
+      drawCRTText(ctx, `${formatScore(gs.score)}`, 100, 560, '#fff', '40px "VT323", monospace', 'center');
+
+      drawCRTText(ctx, `LIVES: ${gs.lives}`, 250, 540, '#fff', '30px "VT323", monospace', 'center');
+      drawCRTText(ctx, `TIME: ${formatTime(gs.noCrashTimer)}`, 550, 540, '#fa0', '30px "VT323", monospace', 'center');
+
+      drawCRTText(ctx, `SPEED`, 700, 520, '#0ff', '20px "VT323", monospace', 'center');
+      drawCRTText(ctx, `${Math.floor(gs.speed)}`, 700, 560, '#fff', '50px "VT323", monospace', 'center');
+
+      // Steering Wheel
+      ctx.save();
+      ctx.translate(400, 560);
+      ctx.rotate(gs.steerAngle);
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 15;
+      ctx.beginPath(); ctx.arc(0, 0, 70, 0, Math.PI*2); ctx.stroke();
+      ctx.lineWidth = 10;
+      ctx.beginPath(); ctx.moveTo(-70, 0); ctx.lineTo(70, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 70); ctx.stroke();
+      ctx.fillStyle = '#0f0'; ctx.fillRect(-5, -75, 10, 10); // Center tape
+      ctx.restore();
+
+      // --- TRANSITION OVERLAY ---
+      if (gs.status === 'transition_red' || gs.status === 'transition_green') {
+          // Traffic Light Post hanging from top
+          ctx.fillStyle = '#222'; ctx.fillRect(350, 0, 100, 200);
           
           ctx.fillStyle = gs.trafficLight === 'red' ? '#f00' : '#300';
           ctx.shadowColor = '#f00'; ctx.shadowBlur = gs.trafficLight === 'red' ? 30 : 0;
-          ctx.beginPath(); ctx.arc(400, 90, 30, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(400, 40, 20, 0, Math.PI*2); ctx.fill();
 
           ctx.fillStyle = gs.trafficLight === 'amber' ? '#fa0' : '#320';
           ctx.shadowColor = '#fa0'; ctx.shadowBlur = gs.trafficLight === 'amber' ? 30 : 0;
-          ctx.beginPath(); ctx.arc(400, 170, 30, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(400, 100, 20, 0, Math.PI*2); ctx.fill();
 
           ctx.fillStyle = gs.trafficLight === 'green' ? '#0f0' : '#030';
           ctx.shadowColor = '#0f0'; ctx.shadowBlur = gs.trafficLight === 'green' ? 30 : 0;
-          ctx.beginPath(); ctx.arc(400, 250, 30, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(400, 160, 20, 0, Math.PI*2); ctx.fill();
           ctx.shadowBlur = 0;
 
+          // Cross traffic at horizon
+          if (gs.trafficLight === 'red') {
+               let ctOffset = (Date.now() / 5) % 1200;
+               ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+               ctx.fillRect(ctOffset - 200, 210, 80, 20); // Car going right
+               ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 10;
+               ctx.fillRect(1000 - ctOffset, 230, 80, 20); // Car going left
+               ctx.shadowBlur = 0;
+          }
+
           if (gs.trafficLight === 'green') {
-             drawCRTText(ctx, "LEVEL UP", 400, 400, '#0f0', '60px "VT323", monospace');
+             drawCRTText(ctx, "LEVEL UP", 400, 300, '#0f0', '60px "VT323", monospace');
           }
       }
-
-      if (gs.status === 'playing' || gs.status === 'transition_red') {
-          ctx.save();
-          ctx.translate(gs.playerX, 480);
-          drawCar(ctx, '#f00', true, false);
-          
-          if (keys.current['Numpad0'] || keys.current['0'] || keys.current['ArrowDown'] || keys.current['s']) {
-              ctx.fillStyle = '#fff';
-              ctx.shadowColor = '#f00';
-              ctx.shadowBlur = 25;
-              ctx.fillRect(-18, 36, 10, 4);
-              ctx.fillRect(8, 36, 10, 4);
-          }
-          ctx.restore();
-      }
-
-      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
-      drawCRTText(ctx, `LIVES: ${gs.lives}`, 400, 30, '#fff', '24px "VT323", monospace');
-      drawCRTText(ctx, `SPEED: ${Math.floor(gs.speed)} MPH`, 680, 30, '#0ff', '24px "VT323", monospace', 'right');
-      drawCRTText(ctx, `TIME: ${formatTime(gs.noCrashTimer)}`, 680, 60, '#fa0', '20px "VT323", monospace', 'right');
       
       if (gs.status === 'gameover') {
-        ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(ctx, "TOTALED", 400, 280, '#f00', '80px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
+        ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,800,480);
+        drawCRTText(ctx, "TOTALED", 400, 200, '#f00', '80px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 280, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 330, '#fff', '24px "VT323", monospace');
       }
     };
 
@@ -1068,7 +702,7 @@ const DriveGame = ({ audioCtx, onMenu }) => {
       }
 
       if (gs.status === 'gameover' && keys.current['Enter']) {
-        gs.score = 0; gs.wave = 1; gs.speed = 0; gs.maxSpeed = 50; gs.trackZ = 0; gs.playerX = 400;
+        gs.score = 0; gs.wave = 1; gs.speed = 0; gs.maxSpeed = 80; gs.trackZ = 0; gs.playerX = 0; gs.steerAngle = 0;
         gs.objects = []; gs.levelTimer = 0; gs.noCrashTimer = 0; gs.lives = 1; gs.nextExtraLifeMin = 5;
         gs.status = 'playing';
         window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
@@ -1077,6 +711,14 @@ const DriveGame = ({ audioCtx, onMenu }) => {
       if (gs.status === 'transition_red') {
           gs.transitionTimer--;
           if (gs.transitionTimer <= 60) gs.trafficLight = 'amber';
+          
+          gs.speed -= 1.5; // Auto brake
+          gs.speed = Math.max(0, gs.speed);
+          gs.trackZ += gs.speed;
+
+          // Steer wheel visually return to center
+          gs.steerAngle *= 0.8;
+
           if (gs.transitionTimer <= 0) {
               gs.trafficLight = 'green';
               gs.status = 'transition_green';
@@ -1087,10 +729,11 @@ const DriveGame = ({ audioCtx, onMenu }) => {
 
       if (gs.status === 'transition_green') {
           gs.transitionTimer--;
+          gs.steerAngle *= 0.8;
           if (gs.transitionTimer <= 0) {
               gs.status = 'playing';
               gs.wave++;
-              gs.maxSpeed += 5; 
+              gs.maxSpeed += 15; 
               gs.levelTimer = 0;
           }
       }
@@ -1104,7 +747,6 @@ const DriveGame = ({ audioCtx, onMenu }) => {
               gs.status = 'transition_red';
               gs.transitionTimer = 7 * 60; 
               gs.trafficLight = 'red';
-              gs.speed = 0; 
           }
 
           let currentExtraLifeFrames = gs.nextExtraLifeMin * 60 * 60;
@@ -1114,52 +756,57 @@ const DriveGame = ({ audioCtx, onMenu }) => {
               playExtraLife();
           }
 
-          if (keys.current['NumpadAdd'] || keys.current['+'] || keys.current['=']) {
+          // Acceleration and Braking
+          if (keys.current['NumpadAdd'] || keys.current['+'] || keys.current['='] || keys.current['w'] || keys.current['ArrowUp']) {
               gs.speed += 0.5;
           } else if (keys.current['Numpad0'] || keys.current['0'] || keys.current['ArrowDown'] || keys.current['s']) {
-              gs.speed -= 1.0;
+              gs.speed -= 1.5;
           } else {
-              gs.speed -= 0.1; 
+              gs.speed -= 0.1; // friction
           }
           gs.speed = Math.max(0, Math.min(gs.maxSpeed, gs.speed));
 
+          // Steering (only allow steer if moving)
           if (gs.speed > 0) {
               let steer = 0;
-              if (keys.current['ArrowLeft'] || keys.current['a']) steer = -6;
-              if (keys.current['ArrowRight'] || keys.current['d']) steer = 6;
+              if (keys.current['ArrowLeft'] || keys.current['a']) steer = -15;
+              if (keys.current['ArrowRight'] || keys.current['d']) steer = 15;
+              
               gs.playerX += steer;
+              
+              // Update visual steering wheel angle
+              let targetAngle = (steer / 15) * (Math.PI / 4);
+              gs.steerAngle += (targetAngle - gs.steerAngle) * 0.2;
+          } else {
+              gs.steerAngle *= 0.8;
           }
-          gs.playerX = Math.max(230, Math.min(570, gs.playerX));
+          gs.playerX = Math.max(-1300, Math.min(1300, gs.playerX)); // Keep on road
 
-          gs.trackZ += gs.speed;
+          gs.trackZ += gs.speed * 2;
 
           if (Math.random() < 0.02 + (gs.wave * 0.005)) spawnObjects(gs);
 
           for (let i = gs.objects.length - 1; i >= 0; i--) {
               let obj = gs.objects[i];
               
-              let netSpeed = gs.speed - obj.baseSpeed;
-              obj.y += netSpeed;
+              if (obj.type === 'car' || obj.type === 'moto') {
+                  obj.z += obj.baseSpeed * 2; // They drive forward in the world
+              }
+              
+              let dz = obj.z - gs.trackZ;
 
-              if (obj.y > 700 || obj.y < -300) {
+              if (dz < -500) {
                   gs.objects.splice(i, 1);
                   continue;
               }
 
-              if (obj.type === 'car' || obj.type === 'moto') {
-                  let pw = 36, ph = 76; 
-                  let px = gs.playerX - pw/2; 
-                  let py = 480 - ph/2; 
-                  
-                  let ow = obj.type === 'moto' ? 18 : 36;
-                  let oh = obj.type === 'moto' ? 36 : 76;
-                  let ox = obj.x - ow/2;
-                  let oy = obj.y - oh/2;
-                  
-                  if (px < ox + ow && px + pw > ox && py < oy + oh && py + ph > oy) {
+              // 3D Collision Detection
+              if (dz > 0 && dz < 400 && (obj.type === 'car' || obj.type === 'moto')) {
+                  if (Math.abs(obj.x - gs.playerX) < 300) {
                       playCrash();
                       gs.lives--;
                       gs.speed = 0;
+                      gs.steerAngle = 0;
                       gs.noCrashTimer = 0;
                       gs.nextExtraLifeMin = 5; 
                       gs.objects.splice(i, 1);
@@ -1255,6 +902,12 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     let animationFrameId;
+
+    const enemyImgs = [
+      (() => { let img = new Image(); img.src = ASSETS.enemy0; return img; })(),
+      (() => { let img = new Image(); img.src = ASSETS.enemy1; return img; })(),
+      (() => { let img = new Image(); img.src = ASSETS.enemy2; return img; })()
+    ];
 
     const playShoot = () => {
       if (!audioCtx || audioCtx.state !== 'running') return;
@@ -2132,6 +1785,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
   );
 };
 
+
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
@@ -2477,6 +2131,7 @@ export default function App() {
   // SECRET CODE KEYSTROKE TRACKER
   useEffect(() => {
     const handleGlobalKeydown = (e) => {
+      // Ignore if the TV is completely off
       if (bootStage === 'off') return;
 
       const key = e.key;
@@ -2495,6 +2150,7 @@ export default function App() {
           secretBufferRef.current = secretBufferRef.current.slice(-40);
         }
 
+        // 1. UNIVERSAL CODE => SHOW MENU ANYTIME
         if (secretBufferRef.current.endsWith('7162327057ABACABB')) {
           secretBufferRef.current = '';
           
@@ -2512,9 +2168,9 @@ export default function App() {
              osc.type = 'square';
              const gain = actx.createGain();
              osc.connect(gain).connect(actx.destination);
-             osc.frequency.setValueAtTime(440, actx.currentTime); 
-             osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); 
-             osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); 
+             osc.frequency.setValueAtTime(440, actx.currentTime); // A4
+             osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); // A5
+             osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); // A6
              gain.gain.setValueAtTime(0.2, actx.currentTime);
              gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.6);
              osc.start(actx.currentTime);
@@ -2528,7 +2184,9 @@ export default function App() {
           }
         }
 
+        // 2. OUTRO ONLY CODES
         if (bootStage === 'final-screen') {
+          // KONAMI CODE => SHOW MENU
           if (secretBufferRef.current.endsWith('UUDDLRLRBAE')) {
             secretBufferRef.current = '';
             setSecretGameState('menu');
@@ -2538,9 +2196,9 @@ export default function App() {
                osc.type = 'square';
                const gain = actx.createGain();
                osc.connect(gain).connect(actx.destination);
-               osc.frequency.setValueAtTime(440, actx.currentTime); 
-               osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); 
-               osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); 
+               osc.frequency.setValueAtTime(440, actx.currentTime); // A4
+               osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); // A5
+               osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); // A6
                gain.gain.setValueAtTime(0.2, actx.currentTime);
                gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.6);
                osc.start(actx.currentTime);
@@ -2554,6 +2212,7 @@ export default function App() {
             }
           }
           
+          // REBOOT EMERGENCY
           if (secretBufferRef.current.endsWith('DULLARD')) {
              secretBufferRef.current = '';
              triggerSecretReboot();
