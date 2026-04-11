@@ -290,15 +290,14 @@ const DriveGame = ({ audioCtx, onMenu }) => {
     highScore: 0,
     wave: 1,
     speed: 0,
-    maxSpeed: 80,
+    maxSpeed: 40,
     trackZ: 0,
-    playerX: 0,
+    playerX: 400,
     objects: [],
     levelTimer: 0,
     noCrashTimer: 0,
     lives: 1,
     nextExtraLifeMin: 5,
-    horizonY: 250,
     trafficLight: 'red',
     transitionTimer: 0
   });
@@ -354,30 +353,28 @@ const DriveGame = ({ audioCtx, onMenu }) => {
       });
     };
 
-    const getTrackOffset = (z) => {
-        return Math.sin(z * 0.001) * 1000 + Math.sin(z * 0.0033) * 500;
-    };
-
     const spawnObjects = (gs) => {
-        let spawnDistance = gs.trackZ + 6000;
-        let count = Math.floor(Math.random() * (3 + gs.wave));
-        
+        let count = Math.floor(Math.random() * (2 + gs.wave));
         for (let i = 0; i < count; i++) {
-            let isObstacle = Math.random() < (0.2 + gs.wave * 0.05);
+            let isObstacle = Math.random() < (0.3 + gs.wave * 0.05);
             let type = isObstacle ? (Math.random() < 0.5 ? 'car' : 'moto') : (Math.random() < 0.6 ? 'tree' : 'house');
             
             let xOffset = 0;
             if (isObstacle) {
-                xOffset = (Math.random() - 0.5) * 1200; // On road
+                // Road bounds: 200 to 600. Obstacles spawn slightly inside edges.
+                xOffset = 220 + Math.random() * 360; 
             } else {
-                xOffset = (Math.random() > 0.5 ? 1 : -1) * (1500 + Math.random() * 2000); // Sides
+                // Scenery outside the road bounds
+                xOffset = Math.random() > 0.5 ? (640 + Math.random() * 100) : (60 + Math.random() * 100);
             }
             
             gs.objects.push({
-                z: spawnDistance + Math.random() * 1000,
+                y: -100 - Math.random() * 800,
                 x: xOffset,
                 type: type,
-                speedZ: isObstacle ? 10 + Math.random() * 20 : 0
+                w: isObstacle ? (type === 'car' ? 40 : 20) : (type === 'tree' ? 40 : 80),
+                h: isObstacle ? (type === 'car' ? 80 : 40) : (type === 'tree' ? 40 : 80),
+                baseSpeed: isObstacle ? (5 + Math.random() * 10) : 0
             });
         }
     };
@@ -391,8 +388,9 @@ const DriveGame = ({ audioCtx, onMenu }) => {
 
     const draw = () => {
       let gs = state.current;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      
+      // Base background fill
+      ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (gs.status === 'start') {
@@ -404,115 +402,62 @@ const DriveGame = ({ audioCtx, onMenu }) => {
         return;
       }
 
-      // Draw Road
-      ctx.lineWidth = 2;
-      let basePlayerOffset = getTrackOffset(gs.trackZ);
-
-      ctx.strokeStyle = '#0ff'; // Road edges
-      ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-      
-      let leftPoints = [];
-      let rightPoints = [];
-      let centerPoints = [];
-
-      for (let y = 600; y >= gs.horizonY; y -= 4) {
-          let dist = 350 / Math.max(1, (y - gs.horizonY));
-          let worldZ = gs.trackZ + dist * 100;
-          let scale = 1 / dist;
-          
-          let curveOffset = getTrackOffset(worldZ) - basePlayerOffset;
-          let screenX = 400 + (curveOffset - gs.playerX) * scale;
-          let roadW = 1500 * scale;
-          
-          leftPoints.push({x: screenX - roadW, y});
-          rightPoints.push({x: screenX + roadW, y});
-          
-          if (Math.floor((worldZ) / 400) % 2 === 0) {
-              centerPoints.push({x: screenX, y, w: 40 * scale});
-          }
-      }
-
+      // Draw Outer Road Lines
+      ctx.strokeStyle = '#ff0'; 
+      ctx.lineWidth = 4;
+      ctx.shadowColor = '#ff0';
+      ctx.shadowBlur = 10;
       ctx.beginPath();
-      leftPoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.moveTo(200, 0); ctx.lineTo(200, 600);
+      ctx.moveTo(600, 0); ctx.lineTo(600, 600);
       ctx.stroke();
 
+      // Draw Center Dashed Line (Animated)
+      ctx.setLineDash([40, 40]);
+      ctx.lineDashOffset = -gs.trackZ;
       ctx.beginPath();
-      rightPoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.moveTo(400, 0); ctx.lineTo(400, 600);
       ctx.stroke();
-
-      ctx.strokeStyle = '#f0f'; ctx.shadowColor = '#f0f';
-      ctx.beginPath();
-      centerPoints.forEach((p) => {
-          ctx.moveTo(p.x - p.w, p.y);
-          ctx.lineTo(p.x + p.w, p.y);
-      });
-      ctx.stroke();
+      ctx.setLineDash([]);
       ctx.shadowBlur = 0;
 
-      // Draw Scenery & Objects (Back to front)
-      let sortedObjects = [...gs.objects].sort((a, b) => b.z - a.z);
-      
-      sortedObjects.forEach(obj => {
-          let dz = obj.z - gs.trackZ;
-          if (dz > 0 && dz < 8000) {
-              let dist = dz / 100;
-              let scale = 1 / dist;
-              let curveOffset = getTrackOffset(obj.z) - basePlayerOffset;
-              let px = 400 + (curveOffset + obj.x - gs.playerX) * scale;
-              let py = gs.horizonY + 350 / dist;
-
-              ctx.save();
-              ctx.translate(px, py);
-              ctx.scale(scale * 1.5, scale * 1.5);
-              
-              if (obj.type === 'tree') {
-                  ctx.fillStyle = '#0f0'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
-                  ctx.beginPath(); ctx.moveTo(0, -200); ctx.lineTo(-80, 0); ctx.lineTo(80, 0); ctx.fill();
-                  ctx.fillStyle = '#050'; ctx.fillRect(-10, 0, 20, 40);
-              } else if (obj.type === 'house') {
-                  ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
-                  ctx.fillRect(-100, -100, 200, 100);
-                  ctx.fillStyle = '#0ff'; ctx.beginPath(); ctx.moveTo(-120, -100); ctx.lineTo(0, -180); ctx.lineTo(120, -100); ctx.fill();
-              } else if (obj.type === 'car') {
-                  ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
-                  ctx.fillRect(-60, -40, 120, 40);
-                  ctx.fillStyle = '#000'; ctx.fillRect(-50, -35, 100, 15);
-                  ctx.fillStyle = '#ff0'; ctx.shadowColor = '#ff0'; ctx.fillRect(-55, -20, 15, 10); ctx.fillRect(40, -20, 15, 10);
-              } else if (obj.type === 'moto') {
-                  ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-                  ctx.fillRect(-20, -50, 40, 50);
-                  ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.beginPath(); ctx.arc(0, -30, 8, 0, Math.PI*2); ctx.fill();
-              }
-              ctx.restore();
+      // Draw Objects (Top down, single color retro shapes)
+      gs.objects.forEach(obj => {
+          if (obj.type === 'tree') {
+              ctx.fillStyle = '#0f0'; ctx.shadowColor = '#0f0';
+          } else if (obj.type === 'house') {
+              ctx.fillStyle = '#00f'; ctx.shadowColor = '#00f';
+          } else if (obj.type === 'car') {
+              ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f';
+          } else if (obj.type === 'moto') {
+              ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff';
           }
+          ctx.shadowBlur = 10;
+          ctx.fillRect(obj.x - obj.w/2, obj.y - obj.h/2, obj.w, obj.h);
+          ctx.shadowBlur = 0;
       });
 
-      // Draw Player Car
-      if (gs.status === 'playing' || gs.status === 'transition_red') {
-          ctx.save();
-          ctx.translate(400, 520);
-          
-          let tilt = 0;
-          if ((keys.current['ArrowLeft'] || keys.current['a'])) tilt = -0.1;
-          if ((keys.current['ArrowRight'] || keys.current['d'])) tilt = 0.1;
-          ctx.transform(1, 0, tilt, 1, 0, 0);
-
-          ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 10;
-          ctx.fillRect(-50, -20, 100, 30);
-          ctx.fillStyle = '#fa0'; ctx.beginPath(); ctx.moveTo(-40, -20); ctx.lineTo(-30, -50); ctx.lineTo(30, -50); ctx.lineTo(40, -20); ctx.fill();
-          
-          ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.fillRect(-45, 0, 20, 8); ctx.fillRect(25, 0, 20, 8);
-          if (keys.current['Numpad0'] || keys.current['0']) {
-              ctx.shadowBlur = 25; ctx.fillStyle = '#fff'; ctx.fillRect(-45, 0, 20, 8); ctx.fillRect(25, 0, 20, 8);
-          }
-          ctx.restore();
-      }
-
-      // Transitions and UI
+      // Intersection / Cross Traffic Transition Layer
       if (gs.status === 'transition_red' || gs.status === 'transition_green') {
-          ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,800,600);
-          
-          // Traffic Light
+          // Intersection road
+          ctx.fillStyle = '#111';
+          ctx.fillRect(0, 150, 800, 100);
+          ctx.strokeStyle = '#ff0'; ctx.shadowColor = '#ff0'; ctx.shadowBlur = 10;
+          ctx.beginPath(); ctx.moveTo(0, 150); ctx.lineTo(800, 150); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(800, 250); ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          // Cross traffic
+          if (gs.trafficLight === 'red') {
+               let ctOffset = (Date.now() / 5) % 1200;
+               ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+               ctx.fillRect(ctOffset - 200, 180, 80, 40);
+               ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 10;
+               ctx.fillRect(1000 - ctOffset, 180, 60, 40);
+               ctx.shadowBlur = 0;
+          }
+
+          // Traffic Light Post
           ctx.fillStyle = '#222'; ctx.fillRect(350, 50, 100, 250);
           
           ctx.fillStyle = gs.trafficLight === 'red' ? '#f00' : '#300';
@@ -526,22 +471,23 @@ const DriveGame = ({ audioCtx, onMenu }) => {
           ctx.fillStyle = gs.trafficLight === 'green' ? '#0f0' : '#030';
           ctx.shadowColor = '#0f0'; ctx.shadowBlur = gs.trafficLight === 'green' ? 30 : 0;
           ctx.beginPath(); ctx.arc(400, 250, 30, 0, Math.PI*2); ctx.fill();
-
-          // Cross traffic
-          if (gs.trafficLight === 'red') {
-             let ctOffset = (Date.now() / 5) % 1200;
-             ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-             ctx.fillRect(ctOffset - 200, gs.horizonY - 10, 80, 20);
-             ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 10;
-             ctx.fillRect(1000 - ctOffset, gs.horizonY, 60, 20);
-          }
+          ctx.shadowBlur = 0;
 
           if (gs.trafficLight === 'green') {
              drawCRTText(ctx, "LEVEL UP", 400, 400, '#0f0', '60px "VT323", monospace');
           }
       }
 
-      ctx.shadowBlur = 0;
+      // Draw Player Car
+      if (gs.status === 'playing' || gs.status === 'transition_red') {
+          ctx.fillStyle = '#f00';
+          ctx.shadowColor = '#f00';
+          ctx.shadowBlur = 15;
+          ctx.fillRect(gs.playerX - 20, 460, 40, 80);
+          ctx.shadowBlur = 0;
+      }
+
+      // UI
       drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
       drawCRTText(ctx, `LIVES: ${gs.lives}`, 400, 30, '#fff', '24px "VT323", monospace');
       drawCRTText(ctx, `SPEED: ${Math.floor(gs.speed)} MPH`, 680, 30, '#0ff', '24px "VT323", monospace', 'right');
@@ -569,7 +515,7 @@ const DriveGame = ({ audioCtx, onMenu }) => {
       }
 
       if (gs.status === 'gameover' && keys.current['Enter']) {
-        gs.score = 0; gs.wave = 1; gs.speed = 0; gs.maxSpeed = 80; gs.trackZ = 0; gs.playerX = 0;
+        gs.score = 0; gs.wave = 1; gs.speed = 0; gs.maxSpeed = 40; gs.trackZ = 0; gs.playerX = 400;
         gs.objects = []; gs.levelTimer = 0; gs.noCrashTimer = 0; gs.lives = 1; gs.nextExtraLifeMin = 5;
         gs.status = 'playing';
         window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
@@ -591,7 +537,7 @@ const DriveGame = ({ audioCtx, onMenu }) => {
           if (gs.transitionTimer <= 0) {
               gs.status = 'playing';
               gs.wave++;
-              gs.maxSpeed += 15;
+              gs.maxSpeed += 5; // Slight bump in speed
               gs.levelTimer = 0;
           }
       }
@@ -603,7 +549,7 @@ const DriveGame = ({ audioCtx, onMenu }) => {
 
           if (gs.levelTimer > 90 * 60) {
               gs.status = 'transition_red';
-              gs.transitionTimer = 7 * 60; // 7 seconds
+              gs.transitionTimer = 7 * 60; 
               gs.trafficLight = 'red';
               gs.speed = 0; 
           }
@@ -625,41 +571,45 @@ const DriveGame = ({ audioCtx, onMenu }) => {
           }
           gs.speed = Math.max(0, Math.min(gs.maxSpeed, gs.speed));
 
-          // Steering
-          let steer = 0;
-          if (keys.current['ArrowLeft'] || keys.current['a']) steer = -15;
-          if (keys.current['ArrowRight'] || keys.current['d']) steer = 15;
-          
-          let curveForce = (getTrackOffset(gs.trackZ + 100) - getTrackOffset(gs.trackZ)) * (gs.speed / 100) * 0.1;
-          gs.playerX += steer + curveForce;
-          gs.playerX = Math.max(-2000, Math.min(2000, gs.playerX));
+          // Steering (only allow steer if moving)
+          if (gs.speed > 0) {
+              let steer = 0;
+              if (keys.current['ArrowLeft'] || keys.current['a']) steer = -10;
+              if (keys.current['ArrowRight'] || keys.current['d']) steer = 10;
+              gs.playerX += steer;
+          }
+          gs.playerX = Math.max(220, Math.min(580, gs.playerX));
 
-          gs.trackZ += gs.speed * 2;
+          gs.trackZ += gs.speed;
 
           if (Math.random() < 0.02 + (gs.wave * 0.005) && gs.speed > 10) spawnObjects(gs);
 
           for (let i = gs.objects.length - 1; i >= 0; i--) {
               let obj = gs.objects[i];
-              obj.z += obj.speedZ;
+              
+              let moveSpeed = gs.speed;
+              if (obj.type === 'car' || obj.type === 'moto') {
+                  moveSpeed = gs.speed - obj.baseSpeed;
+              }
+              
+              obj.y += moveSpeed;
 
-              if (obj.z < gs.trackZ) {
+              if (obj.y > 700 || obj.y < -1500) {
                   gs.objects.splice(i, 1);
                   continue;
               }
 
-              // Collision Detection (only on road objects in front of camera)
-              let dz = obj.z - gs.trackZ;
-              if (dz > 0 && dz < 150 && (obj.type === 'car' || obj.type === 'moto')) {
-                  let curveOffset = getTrackOffset(obj.z) - getTrackOffset(gs.trackZ);
-                  let objScreenX = curveOffset + obj.x;
+              // Collision Detection
+              if (obj.type === 'car' || obj.type === 'moto') {
+                  let px = gs.playerX - 20; let py = 460; let pw = 40; let ph = 80;
+                  let ox = obj.x - obj.w/2; let oy = obj.y - obj.h/2;
                   
-                  if (Math.abs(objScreenX - gs.playerX) < 150) {
-                      // CRASH
+                  if (px < ox + obj.w && px + pw > ox && py < oy + obj.h && py + ph > oy) {
                       playCrash();
                       gs.lives--;
                       gs.speed = 0;
                       gs.noCrashTimer = 0;
-                      gs.nextExtraLifeMin = 5; // Reset reward threshold
+                      gs.nextExtraLifeMin = 5; 
                       gs.objects.splice(i, 1);
                       if (gs.lives <= 0) {
                           gs.status = 'gameover';
@@ -1414,7 +1364,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
             w: 24, h: 24, 
             baseX: offsetX + c * spacingX, baseY: 40 + r * spacingY, 
             phase: Math.random() * Math.PI * 2,
-            type: r % 4, // Distribute 4 unique alien types
+            type: r % 4, 
             state: 'spawning',
             spawnDelay: group * 60 + Math.floor(c/2) * 10, 
             pathTimer: 0,
@@ -1708,7 +1658,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
             if (e.type === 0) color = '#f0f';
             else if (e.type === 1) color = '#f00';
             else if (e.type === 2) color = '#0f0';
-            else color = '#0ff'; // Cyan Spinner
+            else color = '#0ff'; 
             
             if (e.type === 0) { 
                 poly([
