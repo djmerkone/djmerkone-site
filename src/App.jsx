@@ -1601,28 +1601,41 @@ export default function App() {
   // SECRET CODE KEYSTROKE TRACKER
   useEffect(() => {
     const handleGlobalKeydown = (e) => {
-      if (bootStage !== 'final-screen') return;
+      // Ignore if the TV is completely off (before proceed is clicked)
+      if (bootStage === 'off') return;
 
       const key = e.key;
       let mapped = '';
+      
+      // Map arrows and enter specifically, map all other letters/numbers to uppercase
       if (key === 'ArrowUp') mapped = 'U';
       else if (key === 'ArrowDown') mapped = 'D';
       else if (key === 'ArrowLeft') mapped = 'L';
       else if (key === 'ArrowRight') mapped = 'R';
-      else if (key.toLowerCase() === 'b') mapped = 'B';
-      else if (key.toLowerCase() === 'a') mapped = 'A';
       else if (key === 'Enter') mapped = 'E';
+      else if (/^[a-zA-Z0-9]$/.test(key)) mapped = key.toUpperCase();
 
       if (mapped) {
         secretBufferRef.current += mapped;
-        if (secretBufferRef.current.length > 20) {
-          secretBufferRef.current = secretBufferRef.current.slice(-20);
+        // Keep a slightly longer buffer for the new 17-character code
+        if (secretBufferRef.current.length > 40) {
+          secretBufferRef.current = secretBufferRef.current.slice(-40);
         }
 
-        // KONAMI CODE => SHOW MENU
-        if (secretBufferRef.current.endsWith('UUDDLRLRBAE')) {
+        // 1. UNIVERSAL CODE => SHOW MENU ANYTIME
+        if (secretBufferRef.current.endsWith('7162327057ABACABB')) {
           secretBufferRef.current = '';
+          
+          // Force stop any running intro sequences/audio
+          window.speechSynthesis.cancel();
+          cleanupAudio();
+          timeoutsRef.current.forEach(clearTimeout);
+          timeoutsRef.current = [];
+
+          // Jump instantly to the menu
+          setBootStage('final-screen');
           setSecretGameState('menu');
+          
           const actx = audioContextRef.current;
           if (actx) {
              const osc = actx.createOscillator();
@@ -1645,18 +1658,48 @@ export default function App() {
              }
           }
         }
-        
-        // REBOOT EMERGENCY
-        if (secretBufferRef.current.endsWith('DULLARD')) {
-           secretBufferRef.current = '';
-           triggerSecretReboot();
+
+        // 2. OUTRO ONLY CODES
+        if (bootStage === 'final-screen') {
+          // KONAMI CODE => SHOW MENU
+          if (secretBufferRef.current.endsWith('UUDDLRLRBAE')) {
+            secretBufferRef.current = '';
+            setSecretGameState('menu');
+            const actx = audioContextRef.current;
+            if (actx) {
+               const osc = actx.createOscillator();
+               osc.type = 'square';
+               const gain = actx.createGain();
+               osc.connect(gain).connect(actx.destination);
+               osc.frequency.setValueAtTime(440, actx.currentTime); // A4
+               osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); // A5
+               osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); // A6
+               gain.gain.setValueAtTime(0.2, actx.currentTime);
+               gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.6);
+               osc.start(actx.currentTime);
+               osc.stop(actx.currentTime + 0.6);
+               
+               // Pre-build tracks if not already built
+               if (Object.keys(bgmBuffersRef.current).length === 0) {
+                 buildTracks(actx).then(bufs => {
+                   bgmBuffersRef.current = bufs;
+                 });
+               }
+            }
+          }
+          
+          // REBOOT EMERGENCY
+          if (secretBufferRef.current.endsWith('DULLARD')) {
+             secretBufferRef.current = '';
+             triggerSecretReboot();
+          }
         }
       }
     };
     
     window.addEventListener('keydown', handleGlobalKeydown);
     return () => window.removeEventListener('keydown', handleGlobalKeydown);
-  }, [bootStage, triggerSecretReboot]);
+  }, [bootStage, triggerSecretReboot, cleanupAudio]);
 
   useEffect(() => {
     return () => {
