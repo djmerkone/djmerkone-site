@@ -182,9 +182,45 @@ const buildTracks = async (actx) => {
   });
   const commandoOverBuf = await c3.startRendering();
 
+  // ---------------- SNAKE TRACKS ----------------
+  const s1 = new WAudioContext(1, 4 * sr, sr);
+  const nokiaTones = [
+    {f: 1318.51, d: 0.125, s: 0}, {f: 1174.66, d: 0.125, s: 0.125}, {f: 739.99, d: 0.25, s: 0.25}, {f: 830.61, d: 0.25, s: 0.5},
+    {f: 1108.73, d: 0.125, s: 0.75}, {f: 987.77, d: 0.125, s: 0.875}, {f: 587.33, d: 0.25, s: 1.0}, {f: 659.25, d: 0.25, s: 1.25},
+    {f: 987.77, d: 0.125, s: 1.5}, {f: 880.00, d: 0.125, s: 1.625}, {f: 554.37, d: 0.25, s: 1.75}, {f: 659.25, d: 0.25, s: 2.0},
+    {f: 880.00, d: 0.5, s: 2.25}
+  ];
+  nokiaTones.forEach(n => {
+    let osc = s1.createOscillator(); osc.type = 'square'; osc.frequency.value = n.f;
+    let gain = s1.createGain(); gain.gain.setValueAtTime(0.05, n.s); gain.gain.linearRampToValueAtTime(0.001, n.s+n.d-0.01);
+    osc.connect(gain).connect(s1.destination); osc.start(n.s); osc.stop(n.s+n.d);
+  });
+  const snakeStartBuf = await s1.startRendering();
+
+  const s2 = new WAudioContext(1, 16 * sr, sr);
+  for(let beat=0; beat<32; beat++) {
+     let t = beat * 0.5;
+     let f = [220, 220, 261.63, 196.00][beat%4]; 
+     for(let i=0; i<2; i++) {
+        let osc = s2.createOscillator(); osc.type = 'square'; osc.frequency.value = f * (i%2===0?1:2);
+        let gain = s2.createGain(); gain.gain.setValueAtTime(0.04, t + i*0.25); gain.gain.exponentialRampToValueAtTime(0.001, t+i*0.25+0.1);
+        osc.connect(gain).connect(s2.destination); osc.start(t+i*0.25); osc.stop(t+i*0.25+0.1);
+     }
+  }
+  const snakePlayBuf = await s2.startRendering();
+
+  const s3 = new WAudioContext(1, 2 * sr, sr);
+  let s3Osc = s3.createOscillator(); s3Osc.type = 'sawtooth';
+  s3Osc.frequency.setValueAtTime(200, 0); s3Osc.frequency.exponentialRampToValueAtTime(10, 1.0);
+  let s3Gain = s3.createGain(); s3Gain.gain.setValueAtTime(0.1, 0); s3Gain.gain.linearRampToValueAtTime(0.01, 1.0);
+  s3Osc.connect(s3Gain).connect(s3.destination); s3Osc.start(0); s3Osc.stop(1.0);
+  const snakeOverBuf = await s3.startRendering();
+
+
   return { 
     galagaStart: galagaStartBuf, galagaPlay: galagaPlayBuf, galagaOver: galagaOverBuf,
-    commandoStart: commandoStartBuf, commandoPlay: commandoPlayBuf, commandoOver: commandoOverBuf
+    commandoStart: commandoStartBuf, commandoPlay: commandoPlayBuf, commandoOver: commandoOverBuf,
+    snakeStart: snakeStartBuf, snakePlay: snakePlayBuf, snakeOver: snakeOverBuf
   };
 };
 
@@ -204,10 +240,15 @@ const GameMenu = ({ onSelect }) => {
 
   useEffect(() => {
     const handleKeyDown = e => {
-      if (e.key === 'ArrowUp' || e.key === 'w') selectedIndex.current = 0;
-      if (e.key === 'ArrowDown' || e.key === 's') selectedIndex.current = 1;
+      if (e.key === 'ArrowUp' || e.key === 'w') {
+          selectedIndex.current = (selectedIndex.current - 1 + 3) % 3;
+      }
+      if (e.key === 'ArrowDown' || e.key === 's') {
+          selectedIndex.current = (selectedIndex.current + 1) % 3;
+      }
       if (e.key === 'Enter') {
-        onSelect(selectedIndex.current === 0 ? 'galaga' : 'commando');
+          const games = ['galaga', 'commando', 'snake'];
+          onSelect(games[selectedIndex.current]);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -227,13 +268,16 @@ const GameMenu = ({ onSelect }) => {
       drawCRTText(ctx, "SELECT SYSTEM", 400, 150, '#fff', '60px "VT323", monospace');
       
       const opt1Color = selectedIndex.current === 0 ? '#0f0' : '#555';
-      drawCRTText(ctx, "> BASS SPACE ADVENTURES", 400, 300, opt1Color, '40px "VT323", monospace');
+      drawCRTText(ctx, "> BASS SPACE ADVENTURES", 400, 280, opt1Color, '40px "VT323", monospace');
       
       const opt2Color = selectedIndex.current === 1 ? '#0ff' : '#555';
-      drawCRTText(ctx, "> BASS COMMANDO", 400, 380, opt2Color, '40px "VT323", monospace');
+      drawCRTText(ctx, "> BASS COMMANDO", 400, 360, opt2Color, '40px "VT323", monospace');
+
+      const opt3Color = selectedIndex.current === 2 ? '#fa0' : '#555';
+      drawCRTText(ctx, "> BASS SNAKE", 400, 440, opt3Color, '40px "VT323", monospace');
 
       if (Math.floor(Date.now() / 500) % 2 === 0) {
-        drawCRTText(ctx, "PRESS ENTER", 400, 500, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER", 400, 540, '#fff', '24px "VT323", monospace');
       }
     };
 
@@ -245,6 +289,180 @@ const GameMenu = ({ onSelect }) => {
 
     return () => cancelAnimationFrame(animationFrameId);
   }, []);
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+    </div>
+  );
+};
+
+// --- BASS SNAKE GAME COMPONENT ---
+const SnakeGame = ({ audioCtx, onMenu }) => {
+  const canvasRef = useRef(null);
+  
+  const state = useRef({
+    status: 'start', 
+    score: 0,
+    highScore: 0,
+    snake: [{x: 20, y: 15}, {x: 20, y: 16}, {x: 20, y: 17}],
+    dir: {x: 0, y: -1},
+    nextDir: {x: 0, y: -1},
+    food: {x: 10, y: 10},
+    tickCounter: 0,
+    speed: 8 // Frames per tick
+  });
+
+  const keys = useRef({});
+
+  useEffect(() => {
+    const handleKeyDown = e => { 
+        keys.current[e.key] = true; 
+        let sd = state.current.dir;
+        let snd = state.current.nextDir;
+        if ((e.key === 'ArrowUp' || e.key === 'w') && sd.y === 0) snd = {x: 0, y: -1};
+        if ((e.key === 'ArrowDown' || e.key === 's') && sd.y === 0) snd = {x: 0, y: 1};
+        if ((e.key === 'ArrowLeft' || e.key === 'a') && sd.x === 0) snd = {x: -1, y: 0};
+        if ((e.key === 'ArrowRight' || e.key === 'd') && sd.x === 0) snd = {x: 1, y: 0};
+        state.current.nextDir = snd;
+    };
+    const handleKeyUp = e => { keys.current[e.key] = false; };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const spawnFood = (gs) => {
+        let newFood;
+        while(true) {
+            newFood = { x: Math.floor(Math.random() * 40), y: Math.floor(Math.random() * 30) };
+            let conflict = gs.snake.some(s => s.x === newFood.x && s.y === newFood.y);
+            if (!conflict) break;
+        }
+        gs.food = newFood;
+    };
+
+    const formatScore = (s) => String(s).padStart(6, '0');
+
+    const draw = () => {
+      let gs = state.current;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (gs.status === 'start') {
+        drawCRTText(ctx, "BASS SNAKE", 400, 250, '#0f0', '60px "VT323", monospace');
+        drawCRTText(ctx, "NOKIA CLASSIC MODULE", 400, 300, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 420, '#fff', '20px "VT323", monospace');
+        return;
+      }
+
+      // Draw Food (Magenta blink)
+      if (Math.floor(Date.now() / 200) % 2 === 0) {
+          ctx.fillStyle = '#f0f';
+          ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
+          ctx.fillRect(gs.food.x * 20 + 2, gs.food.y * 20 + 2, 16, 16);
+          ctx.shadowBlur = 0;
+      }
+
+      // Draw Snake (Black with green CRT glow)
+      ctx.fillStyle = '#000';
+      ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
+      gs.snake.forEach((s, i) => {
+          if (i === 0) { ctx.fillStyle = '#111'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15; }
+          else { ctx.fillStyle = '#000'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10; }
+          ctx.fillRect(s.x * 20 + 1, s.y * 20 + 1, 18, 18);
+      });
+      ctx.shadowBlur = 0;
+
+      // UI
+      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 30, '#fff', '24px "VT323", monospace');
+      
+      if (gs.status === 'gameover') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
+        drawCRTText(ctx, "GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
+      }
+    };
+
+    const update = () => {
+      let gs = state.current;
+
+      if (keys.current['m'] || keys.current['M']) {
+        onMenu();
+        return;
+      }
+
+      if (gs.status === 'start' && keys.current['Enter']) {
+        gs.status = 'playing';
+        spawnFood(gs);
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
+      }
+
+      if (gs.status === 'gameover' && keys.current['Enter']) {
+        gs.score = 0; gs.speed = 8;
+        gs.snake = [{x: 20, y: 15}, {x: 20, y: 16}, {x: 20, y: 17}];
+        gs.dir = {x: 0, y: -1}; gs.nextDir = {x: 0, y: -1};
+        spawnFood(gs);
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
+      }
+
+      if (gs.status !== 'playing') return;
+
+      gs.tickCounter++;
+      if (gs.tickCounter >= gs.speed) {
+          gs.tickCounter = 0;
+          gs.dir = gs.nextDir;
+          let head = gs.snake[0];
+          let next = { x: head.x + gs.dir.x, y: head.y + gs.dir.y };
+
+          // Wrap around walls
+          if (next.x < 0) next.x = 39;
+          if (next.x > 39) next.x = 0;
+          if (next.y < 0) next.y = 29;
+          if (next.y > 29) next.y = 0;
+
+          // Self Collision
+          if (gs.snake.some(s => s.x === next.x && s.y === next.y)) {
+              gs.status = 'gameover';
+              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
+              return;
+          }
+
+          gs.snake.unshift(next);
+
+          // Food Collision
+          if (next.x === gs.food.x && next.y === gs.food.y) {
+              gs.score += 50;
+              if (gs.score > gs.highScore) gs.highScore = gs.score;
+              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); // Increase speed
+              spawnFood(gs);
+          } else {
+              gs.snake.pop();
+          }
+      }
+    };
+
+    const loop = () => {
+      update(); draw();
+      animationFrameId = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [audioCtx, onMenu]);
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
@@ -490,6 +708,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
         if (exp.life <= 0) gs.explosions.splice(i, 1);
       }
 
+      let hitBottomCount = 0;
       for (let i = gs.incoming.length - 1; i >= 0; i--) {
         let m = gs.incoming[i];
         m.progress += m.speed;
@@ -676,7 +895,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       
       for(let r=0; r<rows; r++) {
         for(let c=0; c<cols; c++) {
-          let group = Math.floor((idx / total) * 4); // 4 staggered mini waves
+          let group = Math.floor((idx / total) * 4); // 4 staggered diagonal entry mini waves
           
           let startX, startY, ctrlX, ctrlY;
           if (group === 0) { startX = -50; startY = 650; ctrlX = 200; ctrlY = 100; }
@@ -845,69 +1064,70 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         let cy = gs.player.y + gs.player.h / 2;
         let tilt = gs.player.tilt || 0;
         let thrust = gs.player.thrust !== undefined ? gs.player.thrust : 1;
-        
-        if (isOverdrive && !isCooldown) {
-          cx += (Math.random() - 0.5) * 4;
-          cy += (Math.random() - 0.5) * 4;
-        }
 
-        ctx.translate(cx, cy - 12); 
-        ctx.scale(Math.cos(tilt * 0.8), 1); 
-        ctx.transform(1, 0, tilt * 0.3, 1, 0, 0); 
-        ctx.translate(0, 12);
+        // Custom 3D perspective projection for authentic arcade ship tilt
+        let roll = tilt * Math.PI / 2.5; 
+        const p = (x, y) => {
+            let z = x * Math.sin(roll);
+            let x2 = x * Math.cos(roll);
+            let scale = 35 / (35 + z); 
+            return { x: x2 * scale, y: y * scale };
+        };
+
+        const poly = (pts, fill, stroke, shadow, blur) => {
+            ctx.fillStyle = fill;
+            ctx.shadowColor = shadow || 'transparent';
+            ctx.shadowBlur = blur || 0;
+            ctx.beginPath();
+            pts.forEach((pt, i) => {
+                let pr = p(pt[0], pt[1]);
+                if (i===0) ctx.moveTo(pr.x, pr.y); else ctx.lineTo(pr.x, pr.y);
+            });
+            ctx.closePath();
+            ctx.fill();
+            if(stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+        };
+
+        ctx.translate(cx, cy - 8); 
+
+        if (isOverdrive && !isCooldown) {
+            ctx.translate((Math.random() - 0.5)*4, (Math.random() - 0.5)*4);
+        }
 
         const mainColor = isCooldown ? '#555' : '#fff';
-        const redAccent = isCooldown ? '#400' : '#f00';
+        const gunColor = isCooldown ? '#333' : '#aaa';
+        const redAccent = isCooldown ? '#400' : '#f05';
         const cyanAccent = isCooldown ? '#044' : '#0ff';
-        const pinkAccent = isCooldown ? '#404' : '#f0f';
+        const baseShadow = isOverdrive && !isCooldown ? '#f50' : '#fff';
+        const baseBlur = isOverdrive && !isCooldown ? 20 : 8;
 
-        ctx.fillStyle = mainColor;
-        ctx.shadowColor = mainColor; ctx.shadowBlur = isOverdrive ? 15 : 5;
-        ctx.beginPath();
-        ctx.moveTo(0, -14); 
-        ctx.lineTo(4, -4);
-        ctx.lineTo(12, 2); 
-        ctx.lineTo(12, 10); 
-        ctx.lineTo(4, 8);
-        ctx.lineTo(4, 12); 
-        ctx.lineTo(-4, 12); 
-        ctx.lineTo(-4, 8);
-        ctx.lineTo(-12, 10); 
-        ctx.lineTo(-12, 2); 
-        ctx.lineTo(-4, -4);
-        ctx.closePath();
-        ctx.fill();
+        // Front Guns
+        poly([[-12, 2], [-12, -8], [-9, -8], [-9, 2]], gunColor);
+        poly([[9, 2], [9, -8], [12, -8], [12, 2]], gunColor);
 
-        ctx.fillStyle = '#aaa'; ctx.shadowBlur = 0;
-        ctx.fillRect(-8, -2, 2, -6);
-        ctx.fillRect(6, -2, 2, -6);
-
-        ctx.fillStyle = pinkAccent;
-        ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(3, 2); ctx.lineTo(-3, 2); ctx.fill();
-
-        ctx.fillStyle = cyanAccent;
-        ctx.fillRect(-10, 4, 2, 4);
-        ctx.fillRect(8, 4, 2, 4);
-
+        // Thruster Engine Flames
         if (!isCooldown) {
-            ctx.fillStyle = '#ff0'; 
-            ctx.beginPath(); ctx.arc(-2, 12, 2, 0, Math.PI); ctx.fill();
-            ctx.beginPath(); ctx.arc(2, 12, 2, 0, Math.PI); ctx.fill();
+            poly([[-5, 12], [-1, 12], [-1, 15], [-5, 15]], '#ff0', null, '#ff0', 5);
+            poly([[1, 12], [5, 12], [5, 15], [1, 15]], '#ff0', null, '#ff0', 5);
 
-            if (thrust > 1) { 
-                ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-                ctx.fillRect(-3, 13, 2, 8 + Math.random()*4);
-                ctx.fillRect(1, 13, 2, 8 + Math.random()*4);
-            } else if (thrust < 1) { 
-                ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 5;
-                ctx.fillRect(-3, 13, 2, 2 + Math.random()*2);
-                ctx.fillRect(1, 13, 2, 2 + Math.random()*2);
-            } else { 
-                ctx.fillStyle = '#fa0'; ctx.shadowColor = '#fa0'; ctx.shadowBlur = 5;
-                ctx.fillRect(-3, 13, 2, 4 + Math.random()*2);
-                ctx.fillRect(1, 13, 2, 4 + Math.random()*2);
-            }
+            let tLen = 15;
+            let tCol = '#fa0';
+            if (thrust > 1) { tLen = 22 + Math.random()*6; tCol = '#0ff'; } 
+            if (thrust < 1) { tLen = 16 + Math.random()*2; tCol = '#f00'; } 
+
+            poly([[-4, 15], [-2, 15], [-3, tLen]], tCol, null, tCol, 10);
+            poly([[2, 15], [4, 15], [3, tLen]], tCol, null, tCol, 10);
         }
+
+        // Main Angular Chassis
+        poly([
+            [0,-14], [3,-4], [14,2], [14,10], [5,7], [5,12],
+            [-5,12], [-5,7], [-14,10], [-14,2], [-3,-4]
+        ], mainColor, '#000', baseShadow, baseBlur);
+
+        // Neon Accents
+        poly([[-10, 4], [-4, 6], [-4, 9], [-10, 8]], cyanAccent, null, cyanAccent, 8);
+        poly([[4, 6], [10, 4], [10, 8], [4, 9]], redAccent, null, redAccent, 8);
 
         ctx.restore();
         
@@ -920,7 +1140,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         drawCRTText(ctx, "READY", 400, 320, '#0f0', '40px "VT323", monospace');
       }
 
-      if (gs.status === 'playing' || gs.status === 'respawning') {
+      if (gs.status === 'playing' || gs.status === 'respawning' || gs.status === 'level_intro') {
         if (gs.isAsteroidLevel) {
           ctx.strokeStyle = '#fa0';
           ctx.fillStyle = '#000';
@@ -1583,7 +1803,11 @@ export default function App() {
   // Video source handler
   useEffect(() => {
     if (videoRef.current) {
-      if (secretGameState === 'commando') {
+      if (secretGameState === 'snake') {
+        videoRef.current.src = "/snake.mp4";
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log(e));
+      } else if (secretGameState === 'commando') {
         videoRef.current.src = "/game2.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
@@ -1685,13 +1909,12 @@ export default function App() {
   // SECRET CODE KEYSTROKE TRACKER
   useEffect(() => {
     const handleGlobalKeydown = (e) => {
-      // Ignore if the TV is completely off (before proceed is clicked)
+      // Ignore if the TV is completely off
       if (bootStage === 'off') return;
 
       const key = e.key;
       let mapped = '';
       
-      // Map arrows and enter specifically, map all other letters/numbers to uppercase
       if (key === 'ArrowUp') mapped = 'U';
       else if (key === 'ArrowDown') mapped = 'D';
       else if (key === 'ArrowLeft') mapped = 'L';
@@ -1701,7 +1924,6 @@ export default function App() {
 
       if (mapped) {
         secretBufferRef.current += mapped;
-        // Keep a slightly longer buffer for the new 17-character code
         if (secretBufferRef.current.length > 40) {
           secretBufferRef.current = secretBufferRef.current.slice(-40);
         }
@@ -1710,13 +1932,11 @@ export default function App() {
         if (secretBufferRef.current.endsWith('7162327057ABACABB')) {
           secretBufferRef.current = '';
           
-          // Force stop any running intro sequences/audio
           window.speechSynthesis.cancel();
           cleanupAudio();
           timeoutsRef.current.forEach(clearTimeout);
           timeoutsRef.current = [];
 
-          // Jump instantly to the menu
           setBootStage('final-screen');
           setSecretGameState('menu');
           
@@ -1734,7 +1954,6 @@ export default function App() {
              osc.start(actx.currentTime);
              osc.stop(actx.currentTime + 0.6);
              
-             // Pre-build tracks if not already built
              if (Object.keys(bgmBuffersRef.current).length === 0) {
                buildTracks(actx).then(bufs => {
                  bgmBuffersRef.current = bufs;
@@ -1763,7 +1982,6 @@ export default function App() {
                osc.start(actx.currentTime);
                osc.stop(actx.currentTime + 0.6);
                
-               // Pre-build tracks if not already built
                if (Object.keys(bgmBuffersRef.current).length === 0) {
                  buildTracks(actx).then(bufs => {
                    bgmBuffersRef.current = bufs;
@@ -1967,11 +2185,14 @@ export default function App() {
                 {secretGameState === 'menu' && (
                   <GameMenu onSelect={(game) => {
                     setSecretGameState(game);
-                    window.dispatchEvent(new CustomEvent('bgmTrack', { detail: game === 'galaga' ? 'galagaStart' : 'commandoStart' }));
+                    if (game === 'galaga') window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaStart' }));
+                    else if (game === 'commando') window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoStart' }));
+                    else if (game === 'snake') window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeStart' }));
                   }} />
                 )}
                 {secretGameState === 'galaga' && <GalagaGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
                 {secretGameState === 'commando' && <CommandoGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
+                {secretGameState === 'snake' && <SnakeGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
                 
                 {secretGameState === 'none' && (
                   <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
