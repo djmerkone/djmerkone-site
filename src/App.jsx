@@ -150,7 +150,7 @@ const buildTracks = async (actx) => {
   let snSrc = s3.createBufferSource(); snSrc.buffer = snBuf; let snGain = s3.createGain(); snGain.gain.setValueAtTime(0.2, 0); snGain.gain.exponentialRampToValueAtTime(0.01, 1.0); snSrc.connect(snGain).connect(s3.destination); snSrc.start(0);
   const snakeOverBuf = await s3.startRendering();
 
-  // ---------------- DRIVE TRACKS (32-bar synthwave looping track) ----------------
+  // ---------------- DRIVE TRACKS ----------------
   const d1 = new WAudioContext(1, 4 * sr, sr);
   let drvRev = d1.createOscillator(); drvRev.type = 'sawtooth'; drvRev.frequency.setValueAtTime(50, 0); drvRev.frequency.exponentialRampToValueAtTime(250, 3.5);
   let drvGain = d1.createGain(); drvGain.gain.setValueAtTime(0.1, 0); drvGain.gain.linearRampToValueAtTime(0, 4.0);
@@ -272,537 +272,6 @@ const GameMenu = ({ onSelect }) => {
 
     return () => cancelAnimationFrame(animationFrameId);
   }, []);
-
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
-      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
-    </div>
-  );
-};
-
-// --- BASS TURBO (DRIVING SIMULATOR) ---
-const DriveGame = ({ audioCtx, onMenu }) => {
-  const canvasRef = useRef(null);
-  
-  const state = useRef({
-    status: 'start', 
-    score: 0,
-    highScore: 0,
-    wave: 1,
-    speed: 0,
-    maxSpeed: 40,
-    trackZ: 0,
-    playerX: 400,
-    objects: [],
-    levelTimer: 0,
-    noCrashTimer: 0,
-    lives: 1,
-    nextExtraLifeMin: 5,
-    trafficLight: 'red',
-    transitionTimer: 0
-  });
-
-  const keys = useRef({});
-
-  useEffect(() => {
-    const handleKeyDown = e => { 
-        keys.current[e.key] = true; 
-        if (e.code) keys.current[e.code] = true;
-    };
-    const handleKeyUp = e => { 
-        keys.current[e.key] = false; 
-        if (e.code) keys.current[e.code] = false;
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-
-    const playCrash = () => {
-      if (!audioCtx || audioCtx.state !== 'running') return;
-      const t0 = audioCtx.currentTime;
-      let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(100, t0); osc.frequency.exponentialRampToValueAtTime(10, t0+0.5);
-      let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.5, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
-      osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+0.5);
-      
-      let noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
-      let nData = noiseBuf.getChannelData(0);
-      for(let i=0; i<nData.length; i++) nData[i] = Math.random()*2-1;
-      let nSrc = audioCtx.createBufferSource(); nSrc.buffer = noiseBuf;
-      let nFilter = audioCtx.createBiquadFilter(); nFilter.type = 'lowpass'; nFilter.frequency.setValueAtTime(800, t0);
-      let nGain = audioCtx.createGain(); nGain.gain.setValueAtTime(0.5, t0); nGain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
-      nSrc.connect(nFilter).connect(nGain).connect(audioCtx.destination); nSrc.start(t0);
-    };
-
-    const playExtraLife = () => {
-      if (!audioCtx || audioCtx.state !== 'running') return;
-      const t0 = audioCtx.currentTime;
-      [659.25, 880, 1318.51].forEach((f, i) => {
-         let osc = audioCtx.createOscillator(); osc.type = 'square'; osc.frequency.value = f;
-         let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0 + i*0.1); gain.gain.linearRampToValueAtTime(0, t0 + i*0.1 + 0.1);
-         osc.connect(gain).connect(audioCtx.destination); osc.start(t0 + i*0.1); osc.stop(t0 + i*0.1 + 0.1);
-      });
-    };
-
-    const spawnObjects = (gs) => {
-        let count = Math.floor(Math.random() * (2 + gs.wave));
-        for (let i = 0; i < count; i++) {
-            let isObstacle = Math.random() < (0.3 + gs.wave * 0.05);
-            let type = isObstacle ? (Math.random() < 0.5 ? 'car' : 'moto') : (Math.random() < 0.6 ? 'tree' : 'house');
-            
-            let xOffset = 0;
-            if (isObstacle) {
-                // Road bounds: 200 to 600. Obstacles spawn slightly inside edges.
-                xOffset = 220 + Math.random() * 360; 
-            } else {
-                // Scenery outside the road bounds
-                xOffset = Math.random() > 0.5 ? (640 + Math.random() * 100) : (60 + Math.random() * 100);
-            }
-            
-            gs.objects.push({
-                y: -100 - Math.random() * 800,
-                x: xOffset,
-                type: type,
-                w: isObstacle ? (type === 'car' ? 40 : 20) : (type === 'tree' ? 40 : 80),
-                h: isObstacle ? (type === 'car' ? 80 : 40) : (type === 'tree' ? 40 : 80),
-                baseSpeed: isObstacle ? (5 + Math.random() * 10) : 0
-            });
-        }
-    };
-
-    const formatScore = (s) => String(s).padStart(6, '0');
-    const formatTime = (frames) => {
-        let s = Math.floor(frames / 60);
-        let m = Math.floor(s / 60);
-        return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-    };
-
-    const draw = () => {
-      let gs = state.current;
-      
-      // Base background fill
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      if (gs.status === 'start') {
-        drawCRTText(ctx, "BASS TURBO", 400, 200, '#f0f', '60px "VT323", monospace');
-        drawCRTText(ctx, "NEON HIGHWAY SIMULATOR", 400, 260, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO START", 400, 360, '#fff', '24px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '20px "VT323", monospace');
-        drawCRTText(ctx, "WASD/ARROWS: Steer  |  NUMPAD +: Gas  |  NUMPAD 0: Brake", 400, 460, '#fff', '20px "VT323", monospace');
-        return;
-      }
-
-      // Draw Outer Road Lines
-      ctx.strokeStyle = '#ff0'; 
-      ctx.lineWidth = 4;
-      ctx.shadowColor = '#ff0';
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.moveTo(200, 0); ctx.lineTo(200, 600);
-      ctx.moveTo(600, 0); ctx.lineTo(600, 600);
-      ctx.stroke();
-
-      // Draw Center Dashed Line (Animated)
-      ctx.setLineDash([40, 40]);
-      ctx.lineDashOffset = -gs.trackZ;
-      ctx.beginPath();
-      ctx.moveTo(400, 0); ctx.lineTo(400, 600);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.shadowBlur = 0;
-
-      // Draw Objects (Top down, single color retro shapes)
-      gs.objects.forEach(obj => {
-          if (obj.type === 'tree') {
-              ctx.fillStyle = '#0f0'; ctx.shadowColor = '#0f0';
-          } else if (obj.type === 'house') {
-              ctx.fillStyle = '#00f'; ctx.shadowColor = '#00f';
-          } else if (obj.type === 'car') {
-              ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f';
-          } else if (obj.type === 'moto') {
-              ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff';
-          }
-          ctx.shadowBlur = 10;
-          ctx.fillRect(obj.x - obj.w/2, obj.y - obj.h/2, obj.w, obj.h);
-          ctx.shadowBlur = 0;
-      });
-
-      // Intersection / Cross Traffic Transition Layer
-      if (gs.status === 'transition_red' || gs.status === 'transition_green') {
-          // Intersection road
-          ctx.fillStyle = '#111';
-          ctx.fillRect(0, 150, 800, 100);
-          ctx.strokeStyle = '#ff0'; ctx.shadowColor = '#ff0'; ctx.shadowBlur = 10;
-          ctx.beginPath(); ctx.moveTo(0, 150); ctx.lineTo(800, 150); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(800, 250); ctx.stroke();
-          ctx.shadowBlur = 0;
-
-          // Cross traffic
-          if (gs.trafficLight === 'red') {
-               let ctOffset = (Date.now() / 5) % 1200;
-               ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-               ctx.fillRect(ctOffset - 200, 180, 80, 40);
-               ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 10;
-               ctx.fillRect(1000 - ctOffset, 180, 60, 40);
-               ctx.shadowBlur = 0;
-          }
-
-          // Traffic Light Post
-          ctx.fillStyle = '#222'; ctx.fillRect(350, 50, 100, 250);
-          
-          ctx.fillStyle = gs.trafficLight === 'red' ? '#f00' : '#300';
-          ctx.shadowColor = '#f00'; ctx.shadowBlur = gs.trafficLight === 'red' ? 30 : 0;
-          ctx.beginPath(); ctx.arc(400, 90, 30, 0, Math.PI*2); ctx.fill();
-
-          ctx.fillStyle = gs.trafficLight === 'amber' ? '#fa0' : '#320';
-          ctx.shadowColor = '#fa0'; ctx.shadowBlur = gs.trafficLight === 'amber' ? 30 : 0;
-          ctx.beginPath(); ctx.arc(400, 170, 30, 0, Math.PI*2); ctx.fill();
-
-          ctx.fillStyle = gs.trafficLight === 'green' ? '#0f0' : '#030';
-          ctx.shadowColor = '#0f0'; ctx.shadowBlur = gs.trafficLight === 'green' ? 30 : 0;
-          ctx.beginPath(); ctx.arc(400, 250, 30, 0, Math.PI*2); ctx.fill();
-          ctx.shadowBlur = 0;
-
-          if (gs.trafficLight === 'green') {
-             drawCRTText(ctx, "LEVEL UP", 400, 400, '#0f0', '60px "VT323", monospace');
-          }
-      }
-
-      // Draw Player Car
-      if (gs.status === 'playing' || gs.status === 'transition_red') {
-          ctx.fillStyle = '#f00';
-          ctx.shadowColor = '#f00';
-          ctx.shadowBlur = 15;
-          ctx.fillRect(gs.playerX - 20, 460, 40, 80);
-          ctx.shadowBlur = 0;
-      }
-
-      // UI
-      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
-      drawCRTText(ctx, `LIVES: ${gs.lives}`, 400, 30, '#fff', '24px "VT323", monospace');
-      drawCRTText(ctx, `SPEED: ${Math.floor(gs.speed)} MPH`, 680, 30, '#0ff', '24px "VT323", monospace', 'right');
-      drawCRTText(ctx, `TIME: ${formatTime(gs.noCrashTimer)}`, 680, 60, '#fa0', '20px "VT323", monospace', 'right');
-      
-      if (gs.status === 'gameover') {
-        ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(ctx, "TOTALED", 400, 280, '#f00', '80px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
-      }
-    };
-
-    const update = () => {
-      let gs = state.current;
-
-      if (keys.current['m'] || keys.current['M']) {
-        onMenu();
-        return;
-      }
-
-      if (gs.status === 'start' && keys.current['Enter']) {
-        gs.status = 'playing';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
-      }
-
-      if (gs.status === 'gameover' && keys.current['Enter']) {
-        gs.score = 0; gs.wave = 1; gs.speed = 0; gs.maxSpeed = 40; gs.trackZ = 0; gs.playerX = 400;
-        gs.objects = []; gs.levelTimer = 0; gs.noCrashTimer = 0; gs.lives = 1; gs.nextExtraLifeMin = 5;
-        gs.status = 'playing';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
-      }
-
-      if (gs.status === 'transition_red') {
-          gs.transitionTimer--;
-          if (gs.transitionTimer <= 60) gs.trafficLight = 'amber';
-          if (gs.transitionTimer <= 0) {
-              gs.trafficLight = 'green';
-              gs.status = 'transition_green';
-              gs.transitionTimer = 60;
-          }
-          return;
-      }
-
-      if (gs.status === 'transition_green') {
-          gs.transitionTimer--;
-          if (gs.transitionTimer <= 0) {
-              gs.status = 'playing';
-              gs.wave++;
-              gs.maxSpeed += 5; // Slight bump in speed
-              gs.levelTimer = 0;
-          }
-      }
-
-      if (gs.status === 'playing') {
-          gs.levelTimer++;
-          gs.noCrashTimer++;
-          gs.score += Math.floor(gs.speed / 10);
-
-          if (gs.levelTimer > 90 * 60) {
-              gs.status = 'transition_red';
-              gs.transitionTimer = 7 * 60; 
-              gs.trafficLight = 'red';
-              gs.speed = 0; 
-          }
-
-          let currentExtraLifeFrames = gs.nextExtraLifeMin * 60 * 60;
-          if (gs.noCrashTimer > currentExtraLifeFrames) {
-              gs.lives++;
-              gs.nextExtraLifeMin += 15;
-              playExtraLife();
-          }
-
-          // Acceleration and Braking
-          if (keys.current['NumpadAdd'] || keys.current['+'] || keys.current['=']) {
-              gs.speed += 0.5;
-          } else if (keys.current['Numpad0'] || keys.current['0'] || keys.current['ArrowDown'] || keys.current['s']) {
-              gs.speed -= 1.0;
-          } else {
-              gs.speed -= 0.1; // friction
-          }
-          gs.speed = Math.max(0, Math.min(gs.maxSpeed, gs.speed));
-
-          // Steering (only allow steer if moving)
-          if (gs.speed > 0) {
-              let steer = 0;
-              if (keys.current['ArrowLeft'] || keys.current['a']) steer = -10;
-              if (keys.current['ArrowRight'] || keys.current['d']) steer = 10;
-              gs.playerX += steer;
-          }
-          gs.playerX = Math.max(220, Math.min(580, gs.playerX));
-
-          gs.trackZ += gs.speed;
-
-          if (Math.random() < 0.02 + (gs.wave * 0.005) && gs.speed > 10) spawnObjects(gs);
-
-          for (let i = gs.objects.length - 1; i >= 0; i--) {
-              let obj = gs.objects[i];
-              
-              let moveSpeed = gs.speed;
-              if (obj.type === 'car' || obj.type === 'moto') {
-                  moveSpeed = gs.speed - obj.baseSpeed;
-              }
-              
-              obj.y += moveSpeed;
-
-              if (obj.y > 700 || obj.y < -1500) {
-                  gs.objects.splice(i, 1);
-                  continue;
-              }
-
-              // Collision Detection
-              if (obj.type === 'car' || obj.type === 'moto') {
-                  let px = gs.playerX - 20; let py = 460; let pw = 40; let ph = 80;
-                  let ox = obj.x - obj.w/2; let oy = obj.y - obj.h/2;
-                  
-                  if (px < ox + obj.w && px + pw > ox && py < oy + obj.h && py + ph > oy) {
-                      playCrash();
-                      gs.lives--;
-                      gs.speed = 0;
-                      gs.noCrashTimer = 0;
-                      gs.nextExtraLifeMin = 5; 
-                      gs.objects.splice(i, 1);
-                      if (gs.lives <= 0) {
-                          gs.status = 'gameover';
-                          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
-                      }
-                  }
-              }
-          }
-      }
-    };
-
-    const loop = () => {
-      update(); draw();
-      animationFrameId = requestAnimationFrame(loop);
-    };
-    loop();
-
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [audioCtx, onMenu]);
-
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
-      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
-    </div>
-  );
-};
-
-
-// --- BASS SNAKE GAME COMPONENT ---
-const SnakeGame = ({ audioCtx, onMenu }) => {
-  const canvasRef = useRef(null);
-  
-  const state = useRef({
-    status: 'start', 
-    score: 0,
-    highScore: 0,
-    snake: [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}],
-    dir: {x: 0, y: -1},
-    nextDir: {x: 0, y: -1},
-    food: {x: 10, y: 10},
-    tickCounter: 0,
-    speed: 8 
-  });
-
-  const keys = useRef({});
-
-  useEffect(() => {
-    const handleKeyDown = e => { 
-        keys.current[e.key] = true; 
-        let sd = state.current.dir;
-        let snd = state.current.nextDir;
-        if ((e.key === 'ArrowUp' || e.key === 'w') && sd.y === 0) snd = {x: 0, y: -1};
-        if ((e.key === 'ArrowDown' || e.key === 's') && sd.y === 0) snd = {x: 0, y: 1};
-        if ((e.key === 'ArrowLeft' || e.key === 'a') && sd.x === 0) snd = {x: -1, y: 0};
-        if ((e.key === 'ArrowRight' || e.key === 'd') && sd.x === 0) snd = {x: 1, y: 0};
-        state.current.nextDir = snd;
-    };
-    const handleKeyUp = e => { keys.current[e.key] = false; };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-
-    const spawnFood = (gs) => {
-        let newFood;
-        while(true) {
-            newFood = { x: Math.floor(Math.random() * 36), y: Math.floor(Math.random() * 24) };
-            let conflict = gs.snake.some(s => s.x === newFood.x && s.y === newFood.y);
-            if (!conflict) break;
-        }
-        gs.food = newFood;
-    };
-
-    const formatScore = (s) => String(s).padStart(6, '0');
-
-    const draw = () => {
-      let gs = state.current;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      if (gs.status === 'start') {
-        drawCRTText(ctx, "BASS SNAKE", 400, 250, '#0f0', '60px "VT323", monospace');
-        drawCRTText(ctx, "NOKIA CLASSIC MODULE", 400, 300, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 420, '#fff', '20px "VT323", monospace');
-        return;
-      }
-
-      ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
-      ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
-      ctx.strokeRect(38, 78, 724, 484);
-      ctx.shadowBlur = 0;
-
-      if (Math.floor(Date.now() / 200) % 2 === 0) {
-          ctx.fillStyle = '#f0f';
-          ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
-          ctx.fillRect(40 + gs.food.x * 20, 80 + gs.food.y * 20, 20, 20);
-          ctx.shadowBlur = 0;
-      }
-
-      gs.snake.forEach((s, i) => {
-          ctx.fillStyle = i === 0 ? '#fff' : '#0f0'; 
-          ctx.shadowColor = i === 0 ? '#fff' : '#0f0'; 
-          ctx.shadowBlur = 15;
-          ctx.fillRect(40 + s.x * 20, 80 + s.y * 20, 20, 20);
-      });
-      ctx.shadowBlur = 0;
-
-      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 40, 45, '#fff', '24px "VT323", monospace', 'left');
-      drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 45, '#fff', '24px "VT323", monospace');
-      
-      if (gs.status === 'gameover') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(ctx, "GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
-        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
-      }
-    };
-
-    const update = () => {
-      let gs = state.current;
-
-      if (keys.current['m'] || keys.current['M']) {
-        onMenu();
-        return;
-      }
-
-      if (gs.status === 'start' && keys.current['Enter']) {
-        gs.status = 'playing';
-        spawnFood(gs);
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
-      }
-
-      if (gs.status === 'gameover' && keys.current['Enter']) {
-        gs.score = 0; gs.speed = 8;
-        gs.snake = [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}];
-        gs.dir = {x: 0, y: -1}; gs.nextDir = {x: 0, y: -1};
-        spawnFood(gs);
-        gs.status = 'playing';
-        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
-      }
-
-      if (gs.status !== 'playing') return;
-
-      gs.tickCounter++;
-      if (gs.tickCounter >= gs.speed) {
-          gs.tickCounter = 0;
-          gs.dir = gs.nextDir;
-          let head = gs.snake[0];
-          let next = { x: head.x + gs.dir.x, y: head.y + gs.dir.y };
-
-          if (next.x < 0 || next.x >= 36 || next.y < 0 || next.y >= 24) {
-              gs.status = 'gameover';
-              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
-              return;
-          }
-
-          if (gs.snake.some(s => s.x === next.x && s.y === next.y)) {
-              gs.status = 'gameover';
-              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
-              return;
-          }
-
-          gs.snake.unshift(next);
-
-          if (next.x === gs.food.x && next.y === gs.food.y) {
-              gs.score += 50;
-              if (gs.score > gs.highScore) gs.highScore = gs.score;
-              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); 
-              spawnFood(gs);
-          } else {
-              gs.snake.pop();
-          }
-      }
-    };
-
-    const loop = () => {
-      update(); draw();
-      animationFrameId = requestAnimationFrame(loop);
-    };
-    loop();
-
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [audioCtx, onMenu]);
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
@@ -1151,6 +620,575 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
     </div>
   );
 };
+
+// --- BASS SNAKE GAME COMPONENT ---
+const SnakeGame = ({ audioCtx, onMenu }) => {
+  const canvasRef = useRef(null);
+  
+  const state = useRef({
+    status: 'start', 
+    score: 0,
+    highScore: 0,
+    snake: [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}],
+    dir: {x: 0, y: -1},
+    nextDir: {x: 0, y: -1},
+    food: {x: 10, y: 10},
+    tickCounter: 0,
+    speed: 8 
+  });
+
+  const keys = useRef({});
+
+  useEffect(() => {
+    const handleKeyDown = e => { 
+        keys.current[e.key] = true; 
+        let sd = state.current.dir;
+        let snd = state.current.nextDir;
+        if ((e.key === 'ArrowUp' || e.key === 'w') && sd.y === 0) snd = {x: 0, y: -1};
+        if ((e.key === 'ArrowDown' || e.key === 's') && sd.y === 0) snd = {x: 0, y: 1};
+        if ((e.key === 'ArrowLeft' || e.key === 'a') && sd.x === 0) snd = {x: -1, y: 0};
+        if ((e.key === 'ArrowRight' || e.key === 'd') && sd.x === 0) snd = {x: 1, y: 0};
+        state.current.nextDir = snd;
+    };
+    const handleKeyUp = e => { keys.current[e.key] = false; };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const spawnFood = (gs) => {
+        let newFood;
+        while(true) {
+            newFood = { x: Math.floor(Math.random() * 36), y: Math.floor(Math.random() * 24) };
+            let conflict = gs.snake.some(s => s.x === newFood.x && s.y === newFood.y);
+            if (!conflict) break;
+        }
+        gs.food = newFood;
+    };
+
+    const formatScore = (s) => String(s).padStart(6, '0');
+
+    const draw = () => {
+      let gs = state.current;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (gs.status === 'start') {
+        drawCRTText(ctx, "BASS SNAKE", 400, 250, '#0f0', '60px "VT323", monospace');
+        drawCRTText(ctx, "NOKIA CLASSIC MODULE", 400, 300, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 420, '#fff', '20px "VT323", monospace');
+        return;
+      }
+
+      ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
+      ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+      ctx.strokeRect(38, 78, 724, 484);
+      ctx.shadowBlur = 0;
+
+      if (Math.floor(Date.now() / 200) % 2 === 0) {
+          ctx.fillStyle = '#f0f';
+          ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
+          ctx.fillRect(40 + gs.food.x * 20, 80 + gs.food.y * 20, 20, 20);
+          ctx.shadowBlur = 0;
+      }
+
+      gs.snake.forEach((s, i) => {
+          ctx.fillStyle = i === 0 ? '#fff' : '#0f0'; 
+          ctx.shadowColor = i === 0 ? '#fff' : '#0f0'; 
+          ctx.shadowBlur = 15;
+          ctx.fillRect(40 + s.x * 20, 80 + s.y * 20, 20, 20);
+      });
+      ctx.shadowBlur = 0;
+
+      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 40, 45, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(ctx, `HI-SCORE: ${formatScore(gs.highScore)}`, 400, 45, '#fff', '24px "VT323", monospace');
+      
+      if (gs.status === 'gameover') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
+        drawCRTText(ctx, "GAME OVER", 400, 280, '#f00', '80px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
+      }
+    };
+
+    const update = () => {
+      let gs = state.current;
+
+      if (keys.current['m'] || keys.current['M']) {
+        onMenu();
+        return;
+      }
+
+      if (gs.status === 'start' && keys.current['Enter']) {
+        gs.status = 'playing';
+        spawnFood(gs);
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
+      }
+
+      if (gs.status === 'gameover' && keys.current['Enter']) {
+        gs.score = 0; gs.speed = 8;
+        gs.snake = [{x: 18, y: 12}, {x: 18, y: 13}, {x: 18, y: 14}];
+        gs.dir = {x: 0, y: -1}; gs.nextDir = {x: 0, y: -1};
+        spawnFood(gs);
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakePlay' }));
+      }
+
+      if (gs.status !== 'playing') return;
+
+      gs.tickCounter++;
+      if (gs.tickCounter >= gs.speed) {
+          gs.tickCounter = 0;
+          gs.dir = gs.nextDir;
+          let head = gs.snake[0];
+          let next = { x: head.x + gs.dir.x, y: head.y + gs.dir.y };
+
+          if (next.x < 0 || next.x >= 36 || next.y < 0 || next.y >= 24) {
+              gs.status = 'gameover';
+              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
+              return;
+          }
+
+          if (gs.snake.some(s => s.x === next.x && s.y === next.y)) {
+              gs.status = 'gameover';
+              window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeOver' }));
+              return;
+          }
+
+          gs.snake.unshift(next);
+
+          if (next.x === gs.food.x && next.y === gs.food.y) {
+              gs.score += 50;
+              if (gs.score > gs.highScore) gs.highScore = gs.score;
+              gs.speed = Math.max(3, 8 - Math.floor(gs.score / 500)); 
+              spawnFood(gs);
+          } else {
+              gs.snake.pop();
+          }
+      }
+    };
+
+    const loop = () => {
+      update(); draw();
+      animationFrameId = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [audioCtx, onMenu]);
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+    </div>
+  );
+};
+
+// --- BASS TURBO (DRIVING SIMULATOR) ---
+const DriveGame = ({ audioCtx, onMenu }) => {
+  const canvasRef = useRef(null);
+  
+  const state = useRef({
+    status: 'start', 
+    score: 0,
+    highScore: 0,
+    wave: 1,
+    speed: 0,
+    maxSpeed: 50,
+    trackZ: 0,
+    playerX: 400,
+    objects: [],
+    levelTimer: 0,
+    noCrashTimer: 0,
+    lives: 1,
+    nextExtraLifeMin: 5,
+    trafficLight: 'red',
+    transitionTimer: 0
+  });
+
+  const keys = useRef({});
+
+  useEffect(() => {
+    const handleKeyDown = e => { 
+        keys.current[e.key] = true; 
+        if (e.code) keys.current[e.code] = true;
+    };
+    const handleKeyUp = e => { 
+        keys.current[e.key] = false; 
+        if (e.code) keys.current[e.code] = false;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const playCrash = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(100, t0); osc.frequency.exponentialRampToValueAtTime(10, t0+0.5);
+      let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.5, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+0.5);
+      
+      let noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+      let nData = noiseBuf.getChannelData(0);
+      for(let i=0; i<nData.length; i++) nData[i] = Math.random()*2-1;
+      let nSrc = audioCtx.createBufferSource(); nSrc.buffer = noiseBuf;
+      let nFilter = audioCtx.createBiquadFilter(); nFilter.type = 'lowpass'; nFilter.frequency.setValueAtTime(800, t0);
+      let nGain = audioCtx.createGain(); nGain.gain.setValueAtTime(0.5, t0); nGain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
+      nSrc.connect(nFilter).connect(nGain).connect(audioCtx.destination); nSrc.start(t0);
+    };
+
+    const playExtraLife = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      [659.25, 880, 1318.51].forEach((f, i) => {
+         let osc = audioCtx.createOscillator(); osc.type = 'square'; osc.frequency.value = f;
+         let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0 + i*0.1); gain.gain.linearRampToValueAtTime(0, t0 + i*0.1 + 0.1);
+         osc.connect(gain).connect(audioCtx.destination); osc.start(t0 + i*0.1); osc.stop(t0 + i*0.1 + 0.1);
+      });
+    };
+
+    const spawnObjects = (gs) => {
+        let isObstacle = Math.random() < 0.6; 
+        if (isObstacle) {
+            let lanes = [250, 350, 450, 550];
+            let laneX = lanes[Math.floor(Math.random() * lanes.length)];
+            
+            let conflict = gs.objects.some(o => o.x === laneX && o.y < 0);
+            if (!conflict) {
+                gs.objects.push({
+                    y: -100,
+                    x: laneX,
+                    type: Math.random() < 0.3 ? 'moto' : 'car',
+                    baseSpeed: 15 + Math.random() * 15, 
+                    color: ['#0ff', '#ff0', '#f0f', '#0f0'][Math.floor(Math.random()*4)]
+                });
+            }
+        } else {
+            let isLeft = Math.random() > 0.5;
+            let xOffset = isLeft ? 50 + Math.random() * 100 : 650 + Math.random() * 100;
+            gs.objects.push({
+                y: -100,
+                x: xOffset,
+                type: Math.random() < 0.5 ? 'tree' : 'house',
+                baseSpeed: 0 
+            });
+        }
+    };
+
+    const formatScore = (s) => String(s).padStart(6, '0');
+    const formatTime = (frames) => {
+        let s = Math.floor(frames / 60);
+        let m = Math.floor(s / 60);
+        return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    };
+
+    const drawCar = (ctx, color, isPlayer = false, isMoto = false) => {
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15;
+        
+        if (isMoto) {
+            ctx.fillRect(-10, -20, 20, 40);
+            ctx.fillStyle = '#fff'; ctx.shadowBlur = 0;
+            ctx.fillRect(-5, -20, 10, 5); 
+            ctx.fillStyle = '#f00'; 
+            ctx.fillRect(-5, 15, 10, 5); 
+        } else {
+            ctx.fillRect(-20, -40, 40, 80);
+            ctx.fillStyle = '#000'; ctx.shadowBlur = 0;
+            ctx.fillRect(-15, -20, 30, 20); 
+            ctx.fillRect(-15, 20, 30, 15);  
+            ctx.fillStyle = isPlayer ? '#fff' : '#ff0';
+            ctx.fillRect(-18, -40, 8, 4); 
+            ctx.fillRect(10, -40, 8, 4);
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(-18, 36, 10, 4); 
+            ctx.fillRect(8, 36, 10, 4);
+        }
+    };
+
+    const draw = () => {
+      let gs = state.current;
+      
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (gs.status === 'start') {
+        drawCRTText(ctx, "BASS TURBO", 400, 200, '#f0f', '60px "VT323", monospace');
+        drawCRTText(ctx, "NEON HIGHWAY SIMULATOR", 400, 260, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO START", 400, 360, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "A/D/ARROWS: Steer  |  NUMPAD +: Gas  |  NUMPAD 0: Brake", 400, 460, '#fff', '20px "VT323", monospace');
+        return;
+      }
+
+      ctx.strokeStyle = '#ff0'; 
+      ctx.lineWidth = 6;
+      ctx.shadowColor = '#ff0';
+      ctx.shadowBlur = 15;
+      ctx.beginPath(); ctx.moveTo(200, 0); ctx.lineTo(200, 600); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(600, 0); ctx.lineTo(600, 600); ctx.stroke();
+
+      ctx.strokeStyle = '#fff'; 
+      ctx.lineWidth = 4; 
+      ctx.shadowColor = '#fff'; 
+      ctx.shadowBlur = 10;
+      ctx.setLineDash([40, 40]); 
+      ctx.lineDashOffset = -gs.trackZ;
+      [300, 400, 500].forEach(lx => {
+          ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, 600); ctx.stroke();
+      });
+      ctx.setLineDash([]); 
+      ctx.shadowBlur = 0;
+
+      gs.objects.forEach(obj => {
+          ctx.save();
+          ctx.translate(obj.x, obj.y);
+          if (obj.type === 'tree') {
+              ctx.fillStyle = '#0f0'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
+              ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(-20, 10); ctx.lineTo(20, 10); ctx.fill();
+              ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(-25, 30); ctx.lineTo(25, 30); ctx.fill();
+              ctx.fillStyle = '#050'; ctx.shadowBlur = 0; ctx.fillRect(-5, 30, 10, 10);
+          } else if (obj.type === 'house') {
+              ctx.fillStyle = '#00f'; ctx.shadowColor = '#00f'; ctx.shadowBlur = 10;
+              ctx.fillRect(-30, -20, 60, 40);
+              ctx.fillStyle = '#0ff'; ctx.shadowBlur = 0;
+              ctx.beginPath(); ctx.moveTo(-35, -20); ctx.lineTo(0, -40); ctx.lineTo(35, -20); ctx.fill();
+              ctx.fillStyle = '#ff0'; ctx.fillRect(-10, -5, 20, 10); 
+          } else if (obj.type === 'car') {
+              drawCar(ctx, obj.color, false, false);
+          } else if (obj.type === 'moto') {
+              drawCar(ctx, obj.color, false, true);
+          }
+          ctx.restore();
+      });
+
+      if (gs.status === 'transition_red' || gs.status === 'transition_green') {
+          ctx.fillStyle = '#111';
+          ctx.fillRect(0, 150, 800, 100);
+          ctx.strokeStyle = '#ff0'; ctx.shadowColor = '#ff0'; ctx.shadowBlur = 10;
+          ctx.beginPath(); ctx.moveTo(0, 150); ctx.lineTo(800, 150); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(800, 250); ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          if (gs.trafficLight === 'red') {
+               let ctOffset = (Date.now() / 5) % 1200;
+               ctx.save();
+               ctx.translate(ctOffset - 200, 180);
+               ctx.rotate(Math.PI / 2);
+               drawCar(ctx, '#0ff', false, false);
+               ctx.restore();
+               
+               ctx.save();
+               ctx.translate(1000 - ctOffset, 220);
+               ctx.rotate(-Math.PI / 2);
+               drawCar(ctx, '#f0f', false, false);
+               ctx.restore();
+          }
+
+          ctx.fillStyle = '#222'; ctx.fillRect(350, 50, 100, 250);
+          
+          ctx.fillStyle = gs.trafficLight === 'red' ? '#f00' : '#300';
+          ctx.shadowColor = '#f00'; ctx.shadowBlur = gs.trafficLight === 'red' ? 30 : 0;
+          ctx.beginPath(); ctx.arc(400, 90, 30, 0, Math.PI*2); ctx.fill();
+
+          ctx.fillStyle = gs.trafficLight === 'amber' ? '#fa0' : '#320';
+          ctx.shadowColor = '#fa0'; ctx.shadowBlur = gs.trafficLight === 'amber' ? 30 : 0;
+          ctx.beginPath(); ctx.arc(400, 170, 30, 0, Math.PI*2); ctx.fill();
+
+          ctx.fillStyle = gs.trafficLight === 'green' ? '#0f0' : '#030';
+          ctx.shadowColor = '#0f0'; ctx.shadowBlur = gs.trafficLight === 'green' ? 30 : 0;
+          ctx.beginPath(); ctx.arc(400, 250, 30, 0, Math.PI*2); ctx.fill();
+          ctx.shadowBlur = 0;
+
+          if (gs.trafficLight === 'green') {
+             drawCRTText(ctx, "LEVEL UP", 400, 400, '#0f0', '60px "VT323", monospace');
+          }
+      }
+
+      if (gs.status === 'playing' || gs.status === 'transition_red') {
+          ctx.save();
+          ctx.translate(gs.playerX, 480);
+          drawCar(ctx, '#f00', true, false);
+          
+          if (keys.current['Numpad0'] || keys.current['0'] || keys.current['ArrowDown'] || keys.current['s']) {
+              ctx.fillStyle = '#fff';
+              ctx.shadowColor = '#f00';
+              ctx.shadowBlur = 25;
+              ctx.fillRect(-18, 36, 10, 4);
+              ctx.fillRect(8, 36, 10, 4);
+          }
+          ctx.restore();
+      }
+
+      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(ctx, `LIVES: ${gs.lives}`, 400, 30, '#fff', '24px "VT323", monospace');
+      drawCRTText(ctx, `SPEED: ${Math.floor(gs.speed)} MPH`, 680, 30, '#0ff', '24px "VT323", monospace', 'right');
+      drawCRTText(ctx, `TIME: ${formatTime(gs.noCrashTimer)}`, 680, 60, '#fa0', '20px "VT323", monospace', 'right');
+      
+      if (gs.status === 'gameover') {
+        ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,800,600);
+        drawCRTText(ctx, "TOTALED", 400, 280, '#f00', '80px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
+      }
+    };
+
+    const update = () => {
+      let gs = state.current;
+
+      if (keys.current['m'] || keys.current['M']) {
+        onMenu();
+        return;
+      }
+
+      if (gs.status === 'start' && keys.current['Enter']) {
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
+      }
+
+      if (gs.status === 'gameover' && keys.current['Enter']) {
+        gs.score = 0; gs.wave = 1; gs.speed = 0; gs.maxSpeed = 50; gs.trackZ = 0; gs.playerX = 400;
+        gs.objects = []; gs.levelTimer = 0; gs.noCrashTimer = 0; gs.lives = 1; gs.nextExtraLifeMin = 5;
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
+      }
+
+      if (gs.status === 'transition_red') {
+          gs.transitionTimer--;
+          if (gs.transitionTimer <= 60) gs.trafficLight = 'amber';
+          if (gs.transitionTimer <= 0) {
+              gs.trafficLight = 'green';
+              gs.status = 'transition_green';
+              gs.transitionTimer = 60;
+          }
+          return;
+      }
+
+      if (gs.status === 'transition_green') {
+          gs.transitionTimer--;
+          if (gs.transitionTimer <= 0) {
+              gs.status = 'playing';
+              gs.wave++;
+              gs.maxSpeed += 5; 
+              gs.levelTimer = 0;
+          }
+      }
+
+      if (gs.status === 'playing') {
+          gs.levelTimer++;
+          gs.noCrashTimer++;
+          gs.score += Math.floor(gs.speed / 10);
+
+          if (gs.levelTimer > 90 * 60) {
+              gs.status = 'transition_red';
+              gs.transitionTimer = 7 * 60; 
+              gs.trafficLight = 'red';
+              gs.speed = 0; 
+          }
+
+          let currentExtraLifeFrames = gs.nextExtraLifeMin * 60 * 60;
+          if (gs.noCrashTimer > currentExtraLifeFrames) {
+              gs.lives++;
+              gs.nextExtraLifeMin += 15;
+              playExtraLife();
+          }
+
+          if (keys.current['NumpadAdd'] || keys.current['+'] || keys.current['=']) {
+              gs.speed += 0.5;
+          } else if (keys.current['Numpad0'] || keys.current['0'] || keys.current['ArrowDown'] || keys.current['s']) {
+              gs.speed -= 1.0;
+          } else {
+              gs.speed -= 0.1; 
+          }
+          gs.speed = Math.max(0, Math.min(gs.maxSpeed, gs.speed));
+
+          if (gs.speed > 0) {
+              let steer = 0;
+              if (keys.current['ArrowLeft'] || keys.current['a']) steer = -6;
+              if (keys.current['ArrowRight'] || keys.current['d']) steer = 6;
+              gs.playerX += steer;
+          }
+          gs.playerX = Math.max(230, Math.min(570, gs.playerX));
+
+          gs.trackZ += gs.speed;
+
+          if (Math.random() < 0.02 + (gs.wave * 0.005)) spawnObjects(gs);
+
+          for (let i = gs.objects.length - 1; i >= 0; i--) {
+              let obj = gs.objects[i];
+              
+              let netSpeed = gs.speed - obj.baseSpeed;
+              obj.y += netSpeed;
+
+              if (obj.y > 700 || obj.y < -300) {
+                  gs.objects.splice(i, 1);
+                  continue;
+              }
+
+              if (obj.type === 'car' || obj.type === 'moto') {
+                  let pw = 36, ph = 76; 
+                  let px = gs.playerX - pw/2; 
+                  let py = 480 - ph/2; 
+                  
+                  let ow = obj.type === 'moto' ? 18 : 36;
+                  let oh = obj.type === 'moto' ? 36 : 76;
+                  let ox = obj.x - ow/2;
+                  let oy = obj.y - oh/2;
+                  
+                  if (px < ox + ow && px + pw > ox && py < oy + oh && py + ph > oy) {
+                      playCrash();
+                      gs.lives--;
+                      gs.speed = 0;
+                      gs.noCrashTimer = 0;
+                      gs.nextExtraLifeMin = 5; 
+                      gs.objects.splice(i, 1);
+                      if (gs.lives <= 0) {
+                          gs.status = 'gameover';
+                          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
+                      }
+                  }
+              }
+          }
+      }
+    };
+
+    const loop = () => {
+      update(); draw();
+      animationFrameId = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [audioCtx, onMenu]);
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+    </div>
+  );
+};
+
 
 // --- SECRET GALAGA-STYLE GAME COMPONENT ---
 const GalagaGame = ({ audioCtx, onMenu }) => {
@@ -2094,7 +2132,6 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
   );
 };
 
-
 export default function App() {
   const [bootStage, setBootStage] = useState('off'); 
   const [hasAcceptedWarning, setHasAcceptedWarning] = useState(false);
@@ -2331,7 +2368,7 @@ export default function App() {
   useEffect(() => {
     if (videoRef.current) {
       if (secretGameState === 'drive') {
-        videoRef.current.src = "/game2.mp4";
+        videoRef.current.src = "/drive.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
       } else if (secretGameState === 'snake') {
@@ -2440,7 +2477,6 @@ export default function App() {
   // SECRET CODE KEYSTROKE TRACKER
   useEffect(() => {
     const handleGlobalKeydown = (e) => {
-      // Ignore if the TV is completely off
       if (bootStage === 'off') return;
 
       const key = e.key;
@@ -2459,7 +2495,6 @@ export default function App() {
           secretBufferRef.current = secretBufferRef.current.slice(-40);
         }
 
-        // 1. UNIVERSAL CODE => SHOW MENU ANYTIME
         if (secretBufferRef.current.endsWith('7162327057ABACABB')) {
           secretBufferRef.current = '';
           
@@ -2477,9 +2512,9 @@ export default function App() {
              osc.type = 'square';
              const gain = actx.createGain();
              osc.connect(gain).connect(actx.destination);
-             osc.frequency.setValueAtTime(440, actx.currentTime); // A4
-             osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); // A5
-             osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); // A6
+             osc.frequency.setValueAtTime(440, actx.currentTime); 
+             osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); 
+             osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); 
              gain.gain.setValueAtTime(0.2, actx.currentTime);
              gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.6);
              osc.start(actx.currentTime);
@@ -2493,9 +2528,7 @@ export default function App() {
           }
         }
 
-        // 2. OUTRO ONLY CODES
         if (bootStage === 'final-screen') {
-          // KONAMI CODE => SHOW MENU
           if (secretBufferRef.current.endsWith('UUDDLRLRBAE')) {
             secretBufferRef.current = '';
             setSecretGameState('menu');
@@ -2505,9 +2538,9 @@ export default function App() {
                osc.type = 'square';
                const gain = actx.createGain();
                osc.connect(gain).connect(actx.destination);
-               osc.frequency.setValueAtTime(440, actx.currentTime); // A4
-               osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); // A5
-               osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); // A6
+               osc.frequency.setValueAtTime(440, actx.currentTime); 
+               osc.frequency.setValueAtTime(880, actx.currentTime + 0.1); 
+               osc.frequency.setValueAtTime(1760, actx.currentTime + 0.2); 
                gain.gain.setValueAtTime(0.2, actx.currentTime);
                gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.6);
                osc.start(actx.currentTime);
@@ -2521,7 +2554,6 @@ export default function App() {
             }
           }
           
-          // REBOOT EMERGENCY
           if (secretBufferRef.current.endsWith('DULLARD')) {
              secretBufferRef.current = '';
              triggerSecretReboot();
