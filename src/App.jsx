@@ -129,9 +129,10 @@ const buildTracks = async (actx) => {
   const c1 = new WAudioContext(1, 8 * sr, sr);
   for(let i=0; i<16; i++) {
     let t = i * 0.5;
-    let a = c1.createOscillator(); a.type = 'square';
-    a.frequency.setValueAtTime(i%2===0 ? 440 : 330, t);
-    let ag = c1.createGain(); ag.gain.setValueAtTime(0.05, t); ag.gain.linearRampToValueAtTime(0.01, t+0.4);
+    // Brooding heartbeat bass note (No more annoying menu alarm)
+    let a = c1.createOscillator(); a.type = 'sine';
+    a.frequency.setValueAtTime(65.41, t); 
+    let ag = c1.createGain(); ag.gain.setValueAtTime(0.3, t); ag.gain.exponentialRampToValueAtTime(0.01, t+0.4);
     a.connect(ag).connect(c1.destination); a.start(t); a.stop(t+0.4);
     playSnare(c1, t, c1.destination);
     if (i%4===3) {
@@ -551,9 +552,9 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
         noise.connect(gain).connect(audioCtx.destination); noise.start(t0);
       } else if (type === 'siren') {
         let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(400, t0); 
-        osc.frequency.linearRampToValueAtTime(700, t0+1.0);
-        osc.frequency.linearRampToValueAtTime(400, t0+2.0);
+        osc.frequency.setValueAtTime(800, t0); 
+        osc.frequency.linearRampToValueAtTime(1200, t0+1.0);
+        osc.frequency.linearRampToValueAtTime(800, t0+2.0);
         
         let lfo = audioCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
         let lfoGain = audioCtx.createGain(); lfoGain.gain.value = 20;
@@ -775,7 +776,6 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
         if (exp.life <= 0) gs.explosions.splice(i, 1);
       }
 
-      let hitBottomCount = 0;
       for (let i = gs.incoming.length - 1; i >= 0; i--) {
         let m = gs.incoming[i];
         m.progress += m.speed;
@@ -812,7 +812,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       if (aliveCities === 0 && gs.status !== 'gameover') {
         gs.status = 'gameover';
         window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoOver' }));
-      } else if (gs.incoming.length === 0 && gs.status !== 'levelcleared') {
+      } else if (gs.status === 'playing' && gs.incoming.length === 0 && gs.status !== 'levelcleared') {
         gs.status = 'levelcleared';
         gs.score += aliveCities * 500;
         window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
@@ -1051,7 +1051,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
             w: 24, h: 24, 
             baseX: offsetX + c * spacingX, baseY: 40 + r * spacingY, 
             phase: Math.random() * Math.PI * 2,
-            type: r % 3,
+            type: r % 4, // Distribute 4 unique alien types
             state: 'spawning',
             spawnDelay: group * 60 + Math.floor(c/2) * 10, 
             pathTimer: 0,
@@ -1240,29 +1240,29 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         const baseShadow = isOverdrive && !isCooldown ? '#f50' : '#fff';
         const baseBlur = isOverdrive && !isCooldown ? 20 : 8;
 
-        poly([[-12, 2], [-12, -8], [-9, -8], [-9, 2]], gunColor);
-        poly([[9, 2], [9, -8], [12, -8], [12, 2]], gunColor);
+        poly([[-12, 3], [-12, -12], [-9, -12], [-9, 3]], gunColor);
+        poly([[9, 3], [9, -12], [12, -12], [12, 3]], gunColor);
 
         if (!isCooldown) {
-            poly([[-5, 12], [-1, 12], [-1, 15], [-5, 15]], '#ff0', null, '#ff0', 5);
-            poly([[1, 12], [5, 12], [5, 15], [1, 15]], '#ff0', null, '#ff0', 5);
+            poly([[-5, 18], [-1, 18], [-1, 22], [-5, 22]], '#ff0', null, '#ff0', 5);
+            poly([[1, 18], [5, 18], [5, 22], [1, 22]], '#ff0', null, '#ff0', 5);
 
-            let tLen = 15;
+            let tLen = 22 + 10;
             let tCol = '#fa0';
-            if (thrust > 1 || gs.status === 'warp_transition') { tLen = 22 + Math.random()*6; tCol = '#0ff'; } 
-            if (thrust < 1) { tLen = 16 + Math.random()*2; tCol = '#f00'; } 
+            if (thrust > 1 || gs.status === 'warp_transition') { tLen = 22 + 18 + Math.random()*8; tCol = '#0ff'; } 
+            if (thrust < 1) { tLen = 22 + 4 + Math.random()*3; tCol = '#f00'; } 
 
-            poly([[-4, 15], [-2, 15], [-3, tLen]], tCol, null, tCol, 10);
-            poly([[2, 15], [4, 15], [3, tLen]], tCol, null, tCol, 10);
+            poly([[-4, 22], [-2, 22], [-3, tLen]], tCol, null, tCol, 10);
+            poly([[2, 22], [4, 22], [3, tLen]], tCol, null, tCol, 10);
         }
 
         poly([
-            [0,-14], [3,-4], [14,2], [14,10], [5,7], [5,12],
-            [-5,12], [-5,7], [-14,10], [-14,2], [-3,-4]
+            [0,-21], [3,-6], [14,3], [14,15], [5,10], [5,18],
+            [-5,18], [-5,10], [-14,15], [-14,3], [-3,-6]
         ], mainColor, '#000', baseShadow, baseBlur);
 
-        poly([[-10, 4], [-4, 6], [-4, 9], [-10, 8]], cyanAccent, null, cyanAccent, 8);
-        poly([[4, 6], [10, 4], [10, 8], [4, 9]], redAccent, null, redAccent, 8);
+        poly([[-10, 6], [-4, 9], [-4, 13], [-10, 12]], cyanAccent, null, cyanAccent, 8);
+        poly([[4, 9], [10, 6], [10, 12], [4, 13]], redAccent, null, redAccent, 8);
 
         ctx.restore();
         
@@ -1308,19 +1308,78 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           });
           ctx.shadowBlur = 0;
         } else {
-          ctx.fillStyle = '#f00'; 
           gs.enemies.forEach(e => {
             if (e.state === 'spawning' && e.spawnDelay > 0) return; 
             
-            if (e.type === 0) ctx.fillStyle = '#f0f';
-            else if (e.type === 1) ctx.fillStyle = '#f00';
-            else ctx.fillStyle = '#0f0';
+            ctx.save();
+            ctx.translate(e.x + e.w/2, e.y + e.h/2);
             
-            ctx.shadowColor = ctx.fillStyle;
-            ctx.shadowBlur = 12;
-            ctx.fillRect(e.x, e.y, e.w, e.h);
+            let tilt = Math.sin((Date.now()/500) + e.phase) * 0.3;
+            if (e.state === 'attacking' || e.state === 'returning') {
+                tilt = (e.x - e.baseX) * 0.005; 
+                tilt = Math.max(-0.5, Math.min(0.5, tilt));
+            }
+
+            let roll = tilt * Math.PI / 4; 
+            const p = (x, y) => {
+                let z = x * Math.sin(roll);
+                let x2 = x * Math.cos(roll);
+                let scale = 25 / (25 + z); 
+                return { x: x2 * scale, y: y * scale };
+            };
+
+            const poly = (pts, fill, shadow, blur) => {
+                ctx.fillStyle = fill;
+                ctx.shadowColor = shadow || 'transparent';
+                ctx.shadowBlur = blur || 0;
+                ctx.beginPath();
+                pts.forEach((pt, i) => {
+                    let pr = p(pt[0], pt[1]);
+                    if (i===0) ctx.moveTo(pr.x, pr.y); else ctx.lineTo(pr.x, pr.y);
+                });
+                ctx.closePath();
+                ctx.fill();
+            };
+
+            let color;
+            if (e.type === 0) color = '#f0f';
+            else if (e.type === 1) color = '#f00';
+            else if (e.type === 2) color = '#0f0';
+            else color = '#0ff'; // Cyan Spinner
+            
+            if (e.type === 0) { 
+                poly([
+                    [0,-10], [4,-4], [12,-6], [10,2], [6,8], [2,4], [0,10],
+                    [-2,4], [-6,8], [-10,2], [-12,-6], [-4,-4]
+                ], color, color, 12);
+                poly([[-4,-2], [-2,0], [-4,2], [-6,0]], '#0ff', '#0ff', 5);
+                poly([[4,-2], [6,0], [4,2], [2,0]], '#0ff', '#0ff', 5);
+            } else if (e.type === 1) { 
+                poly([
+                    [-8,-8], [-4,-10], [4,-10], [8,-8], [12,-2], [10,6], [4,8], [2,4],
+                    [-2,4], [-4,8], [-10,6], [-12,-2]
+                ], color, color, 12);
+                poly([[-12,2], [-16,6], [-14,10], [-10,8]], color, color, 8);
+                poly([[12,2], [16,6], [14,10], [10,8]], color, color, 8);
+                poly([[-4,0], [-2,2], [-4,4], [-6,2]], '#ff0', '#ff0', 5);
+                poly([[4,0], [6,2], [4,4], [2,2]], '#ff0', '#ff0', 5);
+            } else if (e.type === 2) { 
+                poly([
+                    [0,-12], [6,-8], [8,-2], [14,0], [14,6], [8,8], [4,12], [0,8],
+                    [-4,12], [-8,8], [-14,6], [-14,0], [-8,-2], [-6,-8]
+                ], color, color, 12);
+                poly([[-6,0], [-2,2], [-6,4], [-10,2]], '#fff', '#fff', 5);
+                poly([[6,0], [10,2], [6,4], [2,2]], '#fff', '#fff', 5);
+            } else {
+                poly([
+                    [0,-12], [4,-8], [12,-4], [8,0], [12,4], [4,8], [0,12],
+                    [-4,8], [-12,4], [-8,0], [-12,-4], [-4,-8]
+                ], color, color, 12);
+                poly([[-4,0], [-2,2], [-4,4], [-6,2]], '#f0f', '#f0f', 5);
+                poly([[4,0], [6,2], [4,4], [2,2]], '#f0f', '#f0f', 5);
+            }
+            ctx.restore();
           });
-          ctx.shadowBlur = 0;
         }
       }
 
@@ -1699,6 +1758,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         gs.warpTimer = 90; 
         playFanfare();
         if (gs.isAsteroidLevel && gs.asteroidsMissed === 0) {
+            addScore(gs, 0); 
             gs.lives++;
             playExtraLife();
         }
