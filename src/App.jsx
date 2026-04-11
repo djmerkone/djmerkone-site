@@ -12,6 +12,16 @@ const buildTracks = async (actx) => {
   const sr = actx.sampleRate;
   const WAudioContext = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   
+  const playSnare = (ctx, time, dest) => {
+    let noiseBuf = ctx.createBuffer(1, sr * 0.5, sr);
+    let nData = noiseBuf.getChannelData(0);
+    for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
+    let nSrc = ctx.createBufferSource(); nSrc.buffer = noiseBuf;
+    let nFilter = ctx.createBiquadFilter(); nFilter.type = 'bandpass'; nFilter.frequency.value = 1500;
+    let nGain = ctx.createGain(); nGain.gain.setValueAtTime(0.3, time); nGain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+    nSrc.connect(nFilter).connect(nGain).connect(dest); nSrc.start(time); nSrc.stop(time + 0.15);
+  };
+
   // ---------------- GALAGA TRACKS ----------------
   const o1 = new WAudioContext(1, 8 * sr, sr);
   for(let i=0; i<32; i++) {
@@ -19,8 +29,7 @@ const buildTracks = async (actx) => {
     let osc = o1.createOscillator(); osc.type = 'triangle';
     osc.frequency.value = [130.81, 155.56, 196.00, 233.08][i%4] * (i%8 < 4 ? 1 : 1.5);
     let gain = o1.createGain(); gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t+0.2);
-    osc.connect(gain).connect(o1.destination);
-    osc.start(t); osc.stop(t+0.2);
+    osc.connect(gain).connect(o1.destination); osc.start(t); osc.stop(t+0.2);
   }
   const galagaStartBuf = await o1.startRendering();
 
@@ -31,150 +40,75 @@ const buildTracks = async (actx) => {
     { bass: 43.65, pad: [87.31,  103.83, 130.81], arp: [174.61, 207.65, 261.63, 349.23] },
     { bass: 49.00, pad: [98.00,  123.47, 146.83], arp: [196.00, 246.94, 293.66, 392.00] }
   ];
-
   for(let beat=0; beat<128; beat++) {
-    let t = beat * 0.5;
-    let sectionIdx = Math.floor(beat / 32);
-    let sec = galagaSections[sectionIdx];
-
-    let k = o2.createOscillator(); k.type = 'square';
-    k.frequency.setValueAtTime(100, t); k.frequency.exponentialRampToValueAtTime(10, t+0.1);
+    let t = beat * 0.5; let sec = galagaSections[Math.floor(beat / 32)];
+    let k = o2.createOscillator(); k.type = 'square'; k.frequency.setValueAtTime(100, t); k.frequency.exponentialRampToValueAtTime(10, t+0.1);
     let kg = o2.createGain(); kg.gain.setValueAtTime(0.4, t); kg.gain.linearRampToValueAtTime(0.01, t+0.1);
     k.connect(kg).connect(o2.destination); k.start(t); k.stop(t+0.1);
-
     if (beat % 4 === 0) {
       sec.pad.forEach(freq => {
-        let p = o2.createOscillator(); p.type = 'sine';
-        p.frequency.value = freq;
-        let pg = o2.createGain(); 
-        pg.gain.setValueAtTime(0, t); 
-        pg.gain.linearRampToValueAtTime(0.05, t + 0.5); 
-        pg.gain.setValueAtTime(0.05, t + 1.5);
-        pg.gain.linearRampToValueAtTime(0, t + 2.0); 
+        let p = o2.createOscillator(); p.type = 'sine'; p.frequency.value = freq;
+        let pg = o2.createGain(); pg.gain.setValueAtTime(0, t); pg.gain.linearRampToValueAtTime(0.05, t + 0.5); pg.gain.setValueAtTime(0.05, t + 1.5); pg.gain.linearRampToValueAtTime(0, t + 2.0); 
         p.connect(pg).connect(o2.destination); p.start(t); p.stop(t+2.0);
       });
     }
-
     for(let step=0; step<4; step++) {
-      let bt = t + step * 0.125;
-      let b = o2.createOscillator(); b.type = 'triangle';
-      let freq = sec.bass; 
-      if (step === 2 && beat % 2 === 0) freq *= 2; 
-      b.frequency.value = freq;
+      let bt = t + step * 0.125; let b = o2.createOscillator(); b.type = 'triangle'; let freq = sec.bass; 
+      if (step === 2 && beat % 2 === 0) freq *= 2; b.frequency.value = freq;
       let bg = o2.createGain(); bg.gain.setValueAtTime(0.18, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.1);
       b.connect(bg).connect(o2.destination); b.start(bt); b.stop(bt+0.1);
     }
-
     for(let step=0; step<2; step++) {
-      let bt = t + step * 0.25;
-      let m = o2.createOscillator(); m.type = 'sawtooth';
-      let arpIdx = (sectionIdx % 2 === 0) ? ((beat * 2 + step) % 4) : (3 - ((beat * 2 + step) % 4));
-      m.frequency.value = sec.arp[arpIdx];
-      let mg = o2.createGain(); 
-      mg.gain.setValueAtTime(0.04, bt); 
-      mg.gain.exponentialRampToValueAtTime(0.001, bt+0.2);
+      let bt = t + step * 0.25; let m = o2.createOscillator(); m.type = 'sawtooth'; let arpIdx = (Math.floor(beat/32) % 2 === 0) ? ((beat * 2 + step) % 4) : (3 - ((beat * 2 + step) % 4));
+      m.frequency.value = sec.arp[arpIdx]; let mg = o2.createGain(); mg.gain.setValueAtTime(0.04, bt); mg.gain.exponentialRampToValueAtTime(0.001, bt+0.2);
       m.connect(mg).connect(o2.destination); m.start(bt); m.stop(bt+0.2);
     }
   }
   const galagaPlayBuf = await o2.startRendering();
 
-  // Bubbly Warp Sequence Track
   const ow = new WAudioContext(1, 16 * sr, sr);
   for(let beat=0; beat<32; beat++) {
-    let t = beat * 0.5;
-    let k = ow.createOscillator(); k.type = 'square';
-    k.frequency.setValueAtTime(120, t); k.frequency.exponentialRampToValueAtTime(15, t+0.1);
-    let kg = ow.createGain(); kg.gain.setValueAtTime(0.4, t); kg.gain.linearRampToValueAtTime(0.01, t+0.1);
-    k.connect(kg).connect(ow.destination); k.start(t); k.stop(t+0.1);
-
+    let t = beat * 0.5; let k = ow.createOscillator(); k.type = 'square'; k.frequency.setValueAtTime(120, t); k.frequency.exponentialRampToValueAtTime(15, t+0.1);
+    let kg = ow.createGain(); kg.gain.setValueAtTime(0.4, t); kg.gain.linearRampToValueAtTime(0.01, t+0.1); k.connect(kg).connect(ow.destination); k.start(t); k.stop(t+0.1);
     for(let step=0; step<8; step++) {
-      let bt = t + step * 0.0625;
-      let s = ow.createOscillator(); s.type = 'sine';
-      s.frequency.value = [523.25, 659.25, 783.99, 1046.50][step%4] * (beat%2===0?1:1.5);
-      let sg = ow.createGain(); sg.gain.setValueAtTime(0.05, bt); sg.gain.exponentialRampToValueAtTime(0.001, bt+0.05);
-      s.connect(sg).connect(ow.destination); s.start(bt); s.stop(bt+0.05);
+      let bt = t + step * 0.0625; let s = ow.createOscillator(); s.type = 'sine'; s.frequency.value = [523.25, 659.25, 783.99, 1046.50][step%4] * (beat%2===0?1:1.5);
+      let sg = ow.createGain(); sg.gain.setValueAtTime(0.05, bt); sg.gain.exponentialRampToValueAtTime(0.001, bt+0.05); s.connect(sg).connect(ow.destination); s.start(bt); s.stop(bt+0.05);
     }
   }
   const galagaWarpBuf = await ow.startRendering();
 
   const o3 = new WAudioContext(1, 4 * sr, sr);
   for(let i=0; i<8; i++) {
-    let t = i * 0.3;
-    let osc = o3.createOscillator(); osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(150 - i*15, t);
-    let gain = o3.createGain(); gain.gain.setValueAtTime(0.2, t); gain.gain.linearRampToValueAtTime(0.01, t+0.4);
-    osc.connect(gain).connect(o3.destination);
-    osc.start(t); osc.stop(t+0.4);
+    let t = i * 0.3; let osc = o3.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150 - i*15, t);
+    let gain = o3.createGain(); gain.gain.setValueAtTime(0.2, t); gain.gain.linearRampToValueAtTime(0.01, t+0.4); osc.connect(gain).connect(o3.destination); osc.start(t); osc.stop(t+0.4);
   }
   const galagaOverBuf = await o3.startRendering();
 
   // ---------------- COMMANDO TRACKS ----------------
-  const noiseBuf = actx.createBuffer(1, sr * 0.5, sr);
-  const nData = noiseBuf.getChannelData(0);
-  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
-
-  const playSnare = (ctx, time, dest) => {
-    let nSrc = ctx.createBufferSource();
-    nSrc.buffer = noiseBuf;
-    let nFilter = ctx.createBiquadFilter();
-    nFilter.type = 'bandpass';
-    nFilter.frequency.value = 1500;
-    let nGain = ctx.createGain();
-    nGain.gain.setValueAtTime(0.3, time);
-    nGain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
-    nSrc.connect(nFilter).connect(nGain).connect(dest);
-    nSrc.start(time); nSrc.stop(time + 0.15);
-  };
-
   const c1 = new WAudioContext(1, 8 * sr, sr);
   for(let i=0; i<16; i++) {
-    let t = i * 0.5;
-    // Brooding heartbeat bass note (No more annoying menu alarm)
-    let a = c1.createOscillator(); a.type = 'sine';
-    a.frequency.setValueAtTime(65.41, t); 
-    let ag = c1.createGain(); ag.gain.setValueAtTime(0.3, t); ag.gain.exponentialRampToValueAtTime(0.01, t+0.4);
-    a.connect(ag).connect(c1.destination); a.start(t); a.stop(t+0.4);
+    let t = i * 0.5; let a = c1.createOscillator(); a.type = 'sine'; a.frequency.setValueAtTime(65.41, t); 
+    let ag = c1.createGain(); ag.gain.setValueAtTime(0.3, t); ag.gain.exponentialRampToValueAtTime(0.01, t+0.4); a.connect(ag).connect(c1.destination); a.start(t); a.stop(t+0.4);
     playSnare(c1, t, c1.destination);
-    if (i%4===3) {
-       playSnare(c1, t+0.25, c1.destination);
-       playSnare(c1, t+0.375, c1.destination);
-    }
+    if (i%4===3) { playSnare(c1, t+0.25, c1.destination); playSnare(c1, t+0.375, c1.destination); }
   }
   const commandoStartBuf = await c1.startRendering();
 
   const c2 = new WAudioContext(1, 64 * sr, sr);
-  const cmdSections = [
-    { root: 65.41, chords: [130.81, 155.56, 196.00] },
-    { root: 65.41, chords: [130.81, 155.56, 196.00] },
-    { root: 51.91, chords: [103.83, 130.81, 155.56] },
-    { root: 58.27, chords: [116.54, 146.83, 174.61] } 
-  ];
-
+  const cmdSections = [ { root: 65.41, chords: [130.81, 155.56, 196.00] }, { root: 65.41, chords: [130.81, 155.56, 196.00] }, { root: 51.91, chords: [103.83, 130.81, 155.56] }, { root: 58.27, chords: [116.54, 146.83, 174.61] } ];
   for(let beat=0; beat<128; beat++) {
-    let t = beat * 0.5;
-    let sectionIdx = Math.floor(beat / 32);
-    let sec = cmdSections[sectionIdx];
-
-    const marchPattern = [1, 0, 0, 1, 1, 0, 1, 0];
+    let t = beat * 0.5; let sec = cmdSections[Math.floor(beat / 32)]; const marchPattern = [1, 0, 0, 1, 1, 0, 1, 0];
     for(let step=0; step<2; step++) {
-      let bt = t + step * 0.25;
-      let patIdx = (beat * 2 + step) % 8;
+      let bt = t + step * 0.25; let patIdx = (beat * 2 + step) % 8;
       if (marchPattern[patIdx] === 1) {
-        let b = c2.createOscillator(); b.type = 'triangle';
-        b.frequency.value = sec.root;
-        let bg = c2.createGain(); bg.gain.setValueAtTime(0.25, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.2);
-        b.connect(bg).connect(c2.destination); b.start(bt); b.stop(bt+0.2);
+        let b = c2.createOscillator(); b.type = 'triangle'; b.frequency.value = sec.root;
+        let bg = c2.createGain(); bg.gain.setValueAtTime(0.25, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.2); b.connect(bg).connect(c2.destination); b.start(bt); b.stop(bt+0.2);
       }
     }
-
     if (beat % 2 === 0) {
       sec.chords.forEach(freq => {
-        let p = c2.createOscillator(); p.type = 'sawtooth';
-        p.frequency.value = freq;
-        let pg = c2.createGain(); 
-        pg.gain.setValueAtTime(0.08, t); 
-        pg.gain.exponentialRampToValueAtTime(0.01, t + 0.4); 
-        p.connect(pg).connect(c2.destination); p.start(t); p.stop(t+0.4);
+        let p = c2.createOscillator(); p.type = 'sawtooth'; p.frequency.value = freq;
+        let pg = c2.createGain(); pg.gain.setValueAtTime(0.08, t); pg.gain.exponentialRampToValueAtTime(0.01, t + 0.4); p.connect(pg).connect(c2.destination); p.start(t); p.stop(t+0.4);
       });
       playSnare(c2, t, c2.destination);
     }
@@ -182,73 +116,92 @@ const buildTracks = async (actx) => {
   const commandoPlayBuf = await c2.startRendering();
 
   const c3 = new WAudioContext(1, 4 * sr, sr);
-  const taps = [
-    { f: 261.63, d: 0.4, s: 0 },
-    { f: 349.23, d: 0.4, s: 0.5 },
-    { f: 440.00, d: 0.8, s: 1.0 },
-    { f: 261.63, d: 0.4, s: 2.0 },
-    { f: 349.23, d: 0.4, s: 2.5 },
-    { f: 440.00, d: 1.0, s: 3.0 } 
-  ];
-  taps.forEach(note => {
-    let osc = c3.createOscillator(); osc.type = 'square';
-    osc.frequency.value = note.f;
-    let gain = c3.createGain(); 
-    gain.gain.setValueAtTime(0, note.s);
-    gain.gain.linearRampToValueAtTime(0.1, note.s + 0.05);
-    gain.gain.linearRampToValueAtTime(0.01, note.s + note.d - 0.05);
-    osc.connect(gain).connect(c3.destination);
-    osc.start(note.s); osc.stop(note.s + note.d);
+  const taps = [ { f: 261.63, d: 0.4, s: 0 }, { f: 349.23, d: 0.4, s: 0.5 }, { f: 440.00, d: 0.8, s: 1.0 }, { f: 261.63, d: 0.4, s: 2.0 }, { f: 349.23, d: 0.4, s: 2.5 }, { f: 440.00, d: 1.0, s: 3.0 } ];
+  taps.forEach(n => {
+    let osc = c3.createOscillator(); osc.type = 'square'; osc.frequency.value = n.f;
+    let gain = c3.createGain(); gain.gain.setValueAtTime(0, n.s); gain.gain.linearRampToValueAtTime(0.1, n.s + 0.05); gain.gain.linearRampToValueAtTime(0.01, n.s + n.d - 0.05);
+    osc.connect(gain).connect(c3.destination); osc.start(n.s); osc.stop(n.s + n.d);
   });
   const commandoOverBuf = await c3.startRendering();
 
   // ---------------- SNAKE TRACKS ----------------
   const s1 = new WAudioContext(1, 4 * sr, sr);
   for(let i=0; i<16; i++) {
-    let t = i * 0.15;
-    let osc = s1.createOscillator(); osc.type = 'square';
-    osc.frequency.value = 220 * Math.pow(1.059463094359, i); 
-    let gain = s1.createGain(); gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t+0.1);
-    osc.connect(gain).connect(s1.destination); osc.start(t); osc.stop(t+0.1);
+    let t = i * 0.15; let osc = s1.createOscillator(); osc.type = 'square'; osc.frequency.value = 220 * Math.pow(1.059463094359, i); 
+    let gain = s1.createGain(); gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t+0.1); osc.connect(gain).connect(s1.destination); osc.start(t); osc.stop(t+0.1);
   }
   const snakeStartBuf = await s1.startRendering();
 
   const s2 = new WAudioContext(1, 32 * sr, sr);
   for(let beat=0; beat<128; beat++) {
-     let t = beat * 0.25; 
-     let osc = s2.createOscillator(); osc.type = 'triangle';
-     let notes = [110, 110, 220, 110, 130.81, 130.81, 261.63, 130.81];
-     osc.frequency.value = notes[beat % 8];
-     let gain = s2.createGain(); gain.gain.setValueAtTime(0.2, t); gain.gain.exponentialRampToValueAtTime(0.01, t+0.2);
-     osc.connect(gain).connect(s2.destination); osc.start(t); osc.stop(t+0.2);
-     
+     let t = beat * 0.25; let osc = s2.createOscillator(); osc.type = 'triangle'; let notes = [110, 110, 220, 110, 130.81, 130.81, 261.63, 130.81]; osc.frequency.value = notes[beat % 8];
+     let gain = s2.createGain(); gain.gain.setValueAtTime(0.2, t); gain.gain.exponentialRampToValueAtTime(0.01, t+0.2); osc.connect(gain).connect(s2.destination); osc.start(t); osc.stop(t+0.2);
      if (beat % 2 === 0) {
-       let m = s2.createOscillator(); m.type = 'square';
-       m.frequency.value = notes[(beat+2)%8] * 2;
-       let mg = s2.createGain(); mg.gain.setValueAtTime(0.05, t); mg.gain.exponentialRampToValueAtTime(0.001, t+0.1);
-       m.connect(mg).connect(s2.destination); m.start(t); m.stop(t+0.1);
+       let m = s2.createOscillator(); m.type = 'square'; m.frequency.value = notes[(beat+2)%8] * 2;
+       let mg = s2.createGain(); mg.gain.setValueAtTime(0.05, t); mg.gain.exponentialRampToValueAtTime(0.001, t+0.1); m.connect(mg).connect(s2.destination); m.start(t); m.stop(t+0.1);
      }
   }
   const snakePlayBuf = await s2.startRendering();
 
   const s3 = new WAudioContext(1, 2 * sr, sr);
-  let s3Osc = s3.createOscillator(); s3Osc.type = 'sawtooth';
-  s3Osc.frequency.setValueAtTime(150, 0); s3Osc.frequency.exponentialRampToValueAtTime(10, 1.0);
-  let s3Gain = s3.createGain(); s3Gain.gain.setValueAtTime(0.2, 0); s3Gain.gain.linearRampToValueAtTime(0.01, 1.0);
-  s3Osc.connect(s3Gain).connect(s3.destination); s3Osc.start(0); s3Osc.stop(1.0);
-  
-  let snBuf = s3.createBuffer(1, sr, sr);
-  let snDat = snBuf.getChannelData(0);
-  for(let i=0; i<sr; i++) snDat[i] = Math.random()*2-1;
-  let snSrc = s3.createBufferSource(); snSrc.buffer = snBuf;
-  let snGain = s3.createGain(); snGain.gain.setValueAtTime(0.2, 0); snGain.gain.exponentialRampToValueAtTime(0.01, 1.0);
-  snSrc.connect(snGain).connect(s3.destination); snSrc.start(0);
+  let s3Osc = s3.createOscillator(); s3Osc.type = 'sawtooth'; s3Osc.frequency.setValueAtTime(150, 0); s3Osc.frequency.exponentialRampToValueAtTime(10, 1.0);
+  let s3Gain = s3.createGain(); s3Gain.gain.setValueAtTime(0.2, 0); s3Gain.gain.linearRampToValueAtTime(0.01, 1.0); s3Osc.connect(s3Gain).connect(s3.destination); s3Osc.start(0); s3Osc.stop(1.0);
+  let snBuf = s3.createBuffer(1, sr, sr); let snDat = snBuf.getChannelData(0); for(let i=0; i<sr; i++) snDat[i] = Math.random()*2-1;
+  let snSrc = s3.createBufferSource(); snSrc.buffer = snBuf; let snGain = s3.createGain(); snGain.gain.setValueAtTime(0.2, 0); snGain.gain.exponentialRampToValueAtTime(0.01, 1.0); snSrc.connect(snGain).connect(s3.destination); snSrc.start(0);
   const snakeOverBuf = await s3.startRendering();
+
+  // ---------------- DRIVE TRACKS (32-bar synthwave looping track) ----------------
+  const d1 = new WAudioContext(1, 4 * sr, sr);
+  let drvRev = d1.createOscillator(); drvRev.type = 'sawtooth'; drvRev.frequency.setValueAtTime(50, 0); drvRev.frequency.exponentialRampToValueAtTime(250, 3.5);
+  let drvGain = d1.createGain(); drvGain.gain.setValueAtTime(0.1, 0); drvGain.gain.linearRampToValueAtTime(0, 4.0);
+  drvRev.connect(drvGain).connect(d1.destination); drvRev.start(0); drvRev.stop(4.0);
+  const driveStartBuf = await d1.startRendering();
+
+  const d2 = new WAudioContext(1, 64 * sr, sr);
+  const driveChordsMain = [ [110.00, 130.81, 164.81], [87.31, 110.00, 130.81], [65.41, 82.41, 98.00], [98.00, 123.47, 146.83] ];
+  const driveChordsChorus = [ [73.42, 87.31, 110.00], [110.00, 130.81, 164.81], [82.41, 98.00, 123.47], [110.00, 130.81, 164.81] ];
+  for (let beat = 0; beat < 128; beat++) {
+      let t = beat * 0.5;
+      let barIndex = Math.floor(beat / 4);
+      let isChorus = barIndex >= 24;
+      let chordSet = isChorus ? driveChordsChorus : driveChordsMain;
+      let chordIdx = Math.floor((barIndex % 8) / 2);
+      let freqs = chordSet[chordIdx];
+      
+      for (let step = 0; step < 4; step++) {
+          let bt = t + step * 0.125;
+          let b = d2.createOscillator(); b.type = 'sawtooth'; b.frequency.value = freqs[0] / 2; 
+          let bg = d2.createGain(); bg.gain.setValueAtTime(0.15, bt); bg.gain.exponentialRampToValueAtTime(0.01, bt+0.1);
+          let filter = d2.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.setValueAtTime(800, bt); filter.frequency.exponentialRampToValueAtTime(100, bt+0.1);
+          b.connect(filter).connect(bg).connect(d2.destination); b.start(bt); b.stop(bt+0.1);
+      }
+      
+      if (beat % 2 !== 0) {
+          freqs.forEach(f => {
+              let c = d2.createOscillator(); c.type = 'square'; c.frequency.value = f * (isChorus ? 2 : 1);
+              let cg = d2.createGain(); cg.gain.setValueAtTime(0.05, t); cg.gain.exponentialRampToValueAtTime(0.01, t+0.4);
+              c.connect(cg).connect(d2.destination); c.start(t); c.stop(t+0.4);
+          });
+          playSnare(d2, t, d2.destination);
+      }
+  }
+  const drivePlayBuf = await d2.startRendering();
+
+  const d3 = new WAudioContext(1, 4 * sr, sr);
+  let crNoise = d3.createBuffer(1, sr * 4, sr);
+  let crData = crNoise.getChannelData(0);
+  for(let i=0; i<sr*4; i++) crData[i] = Math.random()*2-1;
+  let crSrc = d3.createBufferSource(); crSrc.buffer = crNoise;
+  let crFilter = d3.createBiquadFilter(); crFilter.type = 'lowpass'; crFilter.frequency.setValueAtTime(1000, 0); crFilter.frequency.exponentialRampToValueAtTime(100, 3);
+  let crGain = d3.createGain(); crGain.gain.setValueAtTime(0.5, 0); crGain.gain.exponentialRampToValueAtTime(0.01, 3);
+  crSrc.connect(crFilter).connect(crGain).connect(d3.destination); crSrc.start();
+  const driveOverBuf = await d3.startRendering();
 
   return { 
     galagaStart: galagaStartBuf, galagaPlay: galagaPlayBuf, galagaWarp: galagaWarpBuf, galagaOver: galagaOverBuf,
     commandoStart: commandoStartBuf, commandoPlay: commandoPlayBuf, commandoOver: commandoOverBuf,
-    snakeStart: snakeStartBuf, snakePlay: snakePlayBuf, snakeOver: snakeOverBuf
+    snakeStart: snakeStartBuf, snakePlay: snakePlayBuf, snakeOver: snakeOverBuf,
+    driveStart: driveStartBuf, drivePlay: drivePlayBuf, driveOver: driveOverBuf
   };
 };
 
@@ -269,13 +222,13 @@ const GameMenu = ({ onSelect }) => {
   useEffect(() => {
     const handleKeyDown = e => {
       if (e.key === 'ArrowUp' || e.key === 'w') {
-          selectedIndex.current = (selectedIndex.current - 1 + 3) % 3;
+          selectedIndex.current = (selectedIndex.current - 1 + 4) % 4;
       }
       if (e.key === 'ArrowDown' || e.key === 's') {
-          selectedIndex.current = (selectedIndex.current + 1) % 3;
+          selectedIndex.current = (selectedIndex.current + 1) % 4;
       }
       if (e.key === 'Enter') {
-          const games = ['galaga', 'commando', 'snake'];
+          const games = ['galaga', 'commando', 'snake', 'drive'];
           onSelect(games[selectedIndex.current]);
       }
     };
@@ -293,19 +246,21 @@ const GameMenu = ({ onSelect }) => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      drawCRTText(ctx, "SELECT SYSTEM", 400, 150, '#fff', '60px "VT323", monospace');
+      drawCRTText(ctx, "SELECT SYSTEM", 400, 100, '#fff', '60px "VT323", monospace');
       
-      const opt1Color = selectedIndex.current === 0 ? '#0f0' : '#555';
-      drawCRTText(ctx, "> BASS SPACE ADVENTURES", 400, 280, opt1Color, '40px "VT323", monospace');
-      
-      const opt2Color = selectedIndex.current === 1 ? '#0ff' : '#555';
-      drawCRTText(ctx, "> BASS COMMANDO", 400, 360, opt2Color, '40px "VT323", monospace');
+      const opts = [
+          { text: "> BASS SPACE ADVENTURES", color: '#0f0', y: 220 },
+          { text: "> BASS COMMANDO", color: '#0ff', y: 280 },
+          { text: "> BASS SNAKE", color: '#fa0', y: 340 },
+          { text: "> BASS TURBO", color: '#f0f', y: 400 }
+      ];
 
-      const opt3Color = selectedIndex.current === 2 ? '#fa0' : '#555';
-      drawCRTText(ctx, "> BASS SNAKE", 400, 440, opt3Color, '40px "VT323", monospace');
+      opts.forEach((opt, idx) => {
+          drawCRTText(ctx, opt.text, 400, opt.y, selectedIndex.current === idx ? opt.color : '#555', '40px "VT323", monospace');
+      });
 
       if (Math.floor(Date.now() / 500) % 2 === 0) {
-        drawCRTText(ctx, "PRESS ENTER", 400, 540, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER", 400, 520, '#fff', '24px "VT323", monospace');
       }
     };
 
@@ -324,6 +279,414 @@ const GameMenu = ({ onSelect }) => {
     </div>
   );
 };
+
+// --- BASS TURBO (DRIVING SIMULATOR) ---
+const DriveGame = ({ audioCtx, onMenu }) => {
+  const canvasRef = useRef(null);
+  
+  const state = useRef({
+    status: 'start', 
+    score: 0,
+    highScore: 0,
+    wave: 1,
+    speed: 0,
+    maxSpeed: 80,
+    trackZ: 0,
+    playerX: 0,
+    objects: [],
+    levelTimer: 0,
+    noCrashTimer: 0,
+    lives: 1,
+    nextExtraLifeMin: 5,
+    horizonY: 250,
+    trafficLight: 'red',
+    transitionTimer: 0
+  });
+
+  const keys = useRef({});
+
+  useEffect(() => {
+    const handleKeyDown = e => { 
+        keys.current[e.key] = true; 
+        if (e.code) keys.current[e.code] = true;
+    };
+    const handleKeyUp = e => { 
+        keys.current[e.key] = false; 
+        if (e.code) keys.current[e.code] = false;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const playCrash = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(100, t0); osc.frequency.exponentialRampToValueAtTime(10, t0+0.5);
+      let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.5, t0); gain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(t0); osc.stop(t0+0.5);
+      
+      let noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+      let nData = noiseBuf.getChannelData(0);
+      for(let i=0; i<nData.length; i++) nData[i] = Math.random()*2-1;
+      let nSrc = audioCtx.createBufferSource(); nSrc.buffer = noiseBuf;
+      let nFilter = audioCtx.createBiquadFilter(); nFilter.type = 'lowpass'; nFilter.frequency.setValueAtTime(800, t0);
+      let nGain = audioCtx.createGain(); nGain.gain.setValueAtTime(0.5, t0); nGain.gain.exponentialRampToValueAtTime(0.01, t0+0.5);
+      nSrc.connect(nFilter).connect(nGain).connect(audioCtx.destination); nSrc.start(t0);
+    };
+
+    const playExtraLife = () => {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      [659.25, 880, 1318.51].forEach((f, i) => {
+         let osc = audioCtx.createOscillator(); osc.type = 'square'; osc.frequency.value = f;
+         let gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, t0 + i*0.1); gain.gain.linearRampToValueAtTime(0, t0 + i*0.1 + 0.1);
+         osc.connect(gain).connect(audioCtx.destination); osc.start(t0 + i*0.1); osc.stop(t0 + i*0.1 + 0.1);
+      });
+    };
+
+    const getTrackOffset = (z) => {
+        return Math.sin(z * 0.001) * 1000 + Math.sin(z * 0.0033) * 500;
+    };
+
+    const spawnObjects = (gs) => {
+        let spawnDistance = gs.trackZ + 6000;
+        let count = Math.floor(Math.random() * (3 + gs.wave));
+        
+        for (let i = 0; i < count; i++) {
+            let isObstacle = Math.random() < (0.2 + gs.wave * 0.05);
+            let type = isObstacle ? (Math.random() < 0.5 ? 'car' : 'moto') : (Math.random() < 0.6 ? 'tree' : 'house');
+            
+            let xOffset = 0;
+            if (isObstacle) {
+                xOffset = (Math.random() - 0.5) * 1200; // On road
+            } else {
+                xOffset = (Math.random() > 0.5 ? 1 : -1) * (1500 + Math.random() * 2000); // Sides
+            }
+            
+            gs.objects.push({
+                z: spawnDistance + Math.random() * 1000,
+                x: xOffset,
+                type: type,
+                speedZ: isObstacle ? 10 + Math.random() * 20 : 0
+            });
+        }
+    };
+
+    const formatScore = (s) => String(s).padStart(6, '0');
+    const formatTime = (frames) => {
+        let s = Math.floor(frames / 60);
+        let m = Math.floor(s / 60);
+        return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    };
+
+    const draw = () => {
+      let gs = state.current;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (gs.status === 'start') {
+        drawCRTText(ctx, "BASS TURBO", 400, 200, '#f0f', '60px "VT323", monospace');
+        drawCRTText(ctx, "NEON HIGHWAY SIMULATOR", 400, 260, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO START", 400, 360, '#fff', '24px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "WASD/ARROWS: Steer  |  NUMPAD +: Gas  |  NUMPAD 0: Brake", 400, 460, '#fff', '20px "VT323", monospace');
+        return;
+      }
+
+      // Draw Road
+      ctx.lineWidth = 2;
+      let basePlayerOffset = getTrackOffset(gs.trackZ);
+
+      ctx.strokeStyle = '#0ff'; // Road edges
+      ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+      
+      let leftPoints = [];
+      let rightPoints = [];
+      let centerPoints = [];
+
+      for (let y = 600; y >= gs.horizonY; y -= 4) {
+          let dist = 350 / Math.max(1, (y - gs.horizonY));
+          let worldZ = gs.trackZ + dist * 100;
+          let scale = 1 / dist;
+          
+          let curveOffset = getTrackOffset(worldZ) - basePlayerOffset;
+          let screenX = 400 + (curveOffset - gs.playerX) * scale;
+          let roadW = 1500 * scale;
+          
+          leftPoints.push({x: screenX - roadW, y});
+          rightPoints.push({x: screenX + roadW, y});
+          
+          if (Math.floor((worldZ) / 400) % 2 === 0) {
+              centerPoints.push({x: screenX, y, w: 40 * scale});
+          }
+      }
+
+      ctx.beginPath();
+      leftPoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.stroke();
+
+      ctx.beginPath();
+      rightPoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.stroke();
+
+      ctx.strokeStyle = '#f0f'; ctx.shadowColor = '#f0f';
+      ctx.beginPath();
+      centerPoints.forEach((p) => {
+          ctx.moveTo(p.x - p.w, p.y);
+          ctx.lineTo(p.x + p.w, p.y);
+      });
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Draw Scenery & Objects (Back to front)
+      let sortedObjects = [...gs.objects].sort((a, b) => b.z - a.z);
+      
+      sortedObjects.forEach(obj => {
+          let dz = obj.z - gs.trackZ;
+          if (dz > 0 && dz < 8000) {
+              let dist = dz / 100;
+              let scale = 1 / dist;
+              let curveOffset = getTrackOffset(obj.z) - basePlayerOffset;
+              let px = 400 + (curveOffset + obj.x - gs.playerX) * scale;
+              let py = gs.horizonY + 350 / dist;
+
+              ctx.save();
+              ctx.translate(px, py);
+              ctx.scale(scale * 1.5, scale * 1.5);
+              
+              if (obj.type === 'tree') {
+                  ctx.fillStyle = '#0f0'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
+                  ctx.beginPath(); ctx.moveTo(0, -200); ctx.lineTo(-80, 0); ctx.lineTo(80, 0); ctx.fill();
+                  ctx.fillStyle = '#050'; ctx.fillRect(-10, 0, 20, 40);
+              } else if (obj.type === 'house') {
+                  ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 15;
+                  ctx.fillRect(-100, -100, 200, 100);
+                  ctx.fillStyle = '#0ff'; ctx.beginPath(); ctx.moveTo(-120, -100); ctx.lineTo(0, -180); ctx.lineTo(120, -100); ctx.fill();
+              } else if (obj.type === 'car') {
+                  ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
+                  ctx.fillRect(-60, -40, 120, 40);
+                  ctx.fillStyle = '#000'; ctx.fillRect(-50, -35, 100, 15);
+                  ctx.fillStyle = '#ff0'; ctx.shadowColor = '#ff0'; ctx.fillRect(-55, -20, 15, 10); ctx.fillRect(40, -20, 15, 10);
+              } else if (obj.type === 'moto') {
+                  ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+                  ctx.fillRect(-20, -50, 40, 50);
+                  ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.beginPath(); ctx.arc(0, -30, 8, 0, Math.PI*2); ctx.fill();
+              }
+              ctx.restore();
+          }
+      });
+
+      // Draw Player Car
+      if (gs.status === 'playing' || gs.status === 'transition_red') {
+          ctx.save();
+          ctx.translate(400, 520);
+          
+          let tilt = 0;
+          if ((keys.current['ArrowLeft'] || keys.current['a'])) tilt = -0.1;
+          if ((keys.current['ArrowRight'] || keys.current['d'])) tilt = 0.1;
+          ctx.transform(1, 0, tilt, 1, 0, 0);
+
+          ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 10;
+          ctx.fillRect(-50, -20, 100, 30);
+          ctx.fillStyle = '#fa0'; ctx.beginPath(); ctx.moveTo(-40, -20); ctx.lineTo(-30, -50); ctx.lineTo(30, -50); ctx.lineTo(40, -20); ctx.fill();
+          
+          ctx.fillStyle = '#f00'; ctx.shadowColor = '#f00'; ctx.fillRect(-45, 0, 20, 8); ctx.fillRect(25, 0, 20, 8);
+          if (keys.current['Numpad0'] || keys.current['0']) {
+              ctx.shadowBlur = 25; ctx.fillStyle = '#fff'; ctx.fillRect(-45, 0, 20, 8); ctx.fillRect(25, 0, 20, 8);
+          }
+          ctx.restore();
+      }
+
+      // Transitions and UI
+      if (gs.status === 'transition_red' || gs.status === 'transition_green') {
+          ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,800,600);
+          
+          // Traffic Light
+          ctx.fillStyle = '#222'; ctx.fillRect(350, 50, 100, 250);
+          
+          ctx.fillStyle = gs.trafficLight === 'red' ? '#f00' : '#300';
+          ctx.shadowColor = '#f00'; ctx.shadowBlur = gs.trafficLight === 'red' ? 30 : 0;
+          ctx.beginPath(); ctx.arc(400, 90, 30, 0, Math.PI*2); ctx.fill();
+
+          ctx.fillStyle = gs.trafficLight === 'amber' ? '#fa0' : '#320';
+          ctx.shadowColor = '#fa0'; ctx.shadowBlur = gs.trafficLight === 'amber' ? 30 : 0;
+          ctx.beginPath(); ctx.arc(400, 170, 30, 0, Math.PI*2); ctx.fill();
+
+          ctx.fillStyle = gs.trafficLight === 'green' ? '#0f0' : '#030';
+          ctx.shadowColor = '#0f0'; ctx.shadowBlur = gs.trafficLight === 'green' ? 30 : 0;
+          ctx.beginPath(); ctx.arc(400, 250, 30, 0, Math.PI*2); ctx.fill();
+
+          // Cross traffic
+          if (gs.trafficLight === 'red') {
+             let ctOffset = (Date.now() / 5) % 1200;
+             ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+             ctx.fillRect(ctOffset - 200, gs.horizonY - 10, 80, 20);
+             ctx.fillStyle = '#f0f'; ctx.shadowColor = '#f0f'; ctx.shadowBlur = 10;
+             ctx.fillRect(1000 - ctOffset, gs.horizonY, 60, 20);
+          }
+
+          if (gs.trafficLight === 'green') {
+             drawCRTText(ctx, "LEVEL UP", 400, 400, '#0f0', '60px "VT323", monospace');
+          }
+      }
+
+      ctx.shadowBlur = 0;
+      drawCRTText(ctx, `SCORE: ${formatScore(gs.score)}`, 20, 30, '#fff', '24px "VT323", monospace', 'left');
+      drawCRTText(ctx, `LIVES: ${gs.lives}`, 400, 30, '#fff', '24px "VT323", monospace');
+      drawCRTText(ctx, `SPEED: ${Math.floor(gs.speed)} MPH`, 680, 30, '#0ff', '24px "VT323", monospace', 'right');
+      drawCRTText(ctx, `TIME: ${formatTime(gs.noCrashTimer)}`, 680, 60, '#fa0', '20px "VT323", monospace', 'right');
+      
+      if (gs.status === 'gameover') {
+        ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,800,600);
+        drawCRTText(ctx, "TOTALED", 400, 280, '#f00', '80px "VT323", monospace');
+        drawCRTText(ctx, "PRESS ENTER TO RESTART", 400, 350, '#fff', '30px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 400, '#fff', '24px "VT323", monospace');
+      }
+    };
+
+    const update = () => {
+      let gs = state.current;
+
+      if (keys.current['m'] || keys.current['M']) {
+        onMenu();
+        return;
+      }
+
+      if (gs.status === 'start' && keys.current['Enter']) {
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
+      }
+
+      if (gs.status === 'gameover' && keys.current['Enter']) {
+        gs.score = 0; gs.wave = 1; gs.speed = 0; gs.maxSpeed = 80; gs.trackZ = 0; gs.playerX = 0;
+        gs.objects = []; gs.levelTimer = 0; gs.noCrashTimer = 0; gs.lives = 1; gs.nextExtraLifeMin = 5;
+        gs.status = 'playing';
+        window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'drivePlay' }));
+      }
+
+      if (gs.status === 'transition_red') {
+          gs.transitionTimer--;
+          if (gs.transitionTimer <= 60) gs.trafficLight = 'amber';
+          if (gs.transitionTimer <= 0) {
+              gs.trafficLight = 'green';
+              gs.status = 'transition_green';
+              gs.transitionTimer = 60;
+          }
+          return;
+      }
+
+      if (gs.status === 'transition_green') {
+          gs.transitionTimer--;
+          if (gs.transitionTimer <= 0) {
+              gs.status = 'playing';
+              gs.wave++;
+              gs.maxSpeed += 15;
+              gs.levelTimer = 0;
+          }
+      }
+
+      if (gs.status === 'playing') {
+          gs.levelTimer++;
+          gs.noCrashTimer++;
+          gs.score += Math.floor(gs.speed / 10);
+
+          if (gs.levelTimer > 90 * 60) {
+              gs.status = 'transition_red';
+              gs.transitionTimer = 7 * 60; // 7 seconds
+              gs.trafficLight = 'red';
+              gs.speed = 0; 
+          }
+
+          let currentExtraLifeFrames = gs.nextExtraLifeMin * 60 * 60;
+          if (gs.noCrashTimer > currentExtraLifeFrames) {
+              gs.lives++;
+              gs.nextExtraLifeMin += 15;
+              playExtraLife();
+          }
+
+          // Acceleration and Braking
+          if (keys.current['NumpadAdd'] || keys.current['+'] || keys.current['=']) {
+              gs.speed += 0.5;
+          } else if (keys.current['Numpad0'] || keys.current['0'] || keys.current['ArrowDown'] || keys.current['s']) {
+              gs.speed -= 1.0;
+          } else {
+              gs.speed -= 0.1; // friction
+          }
+          gs.speed = Math.max(0, Math.min(gs.maxSpeed, gs.speed));
+
+          // Steering
+          let steer = 0;
+          if (keys.current['ArrowLeft'] || keys.current['a']) steer = -15;
+          if (keys.current['ArrowRight'] || keys.current['d']) steer = 15;
+          
+          let curveForce = (getTrackOffset(gs.trackZ + 100) - getTrackOffset(gs.trackZ)) * (gs.speed / 100) * 0.1;
+          gs.playerX += steer + curveForce;
+          gs.playerX = Math.max(-2000, Math.min(2000, gs.playerX));
+
+          gs.trackZ += gs.speed * 2;
+
+          if (Math.random() < 0.02 + (gs.wave * 0.005) && gs.speed > 10) spawnObjects(gs);
+
+          for (let i = gs.objects.length - 1; i >= 0; i--) {
+              let obj = gs.objects[i];
+              obj.z += obj.speedZ;
+
+              if (obj.z < gs.trackZ) {
+                  gs.objects.splice(i, 1);
+                  continue;
+              }
+
+              // Collision Detection (only on road objects in front of camera)
+              let dz = obj.z - gs.trackZ;
+              if (dz > 0 && dz < 150 && (obj.type === 'car' || obj.type === 'moto')) {
+                  let curveOffset = getTrackOffset(obj.z) - getTrackOffset(gs.trackZ);
+                  let objScreenX = curveOffset + obj.x;
+                  
+                  if (Math.abs(objScreenX - gs.playerX) < 150) {
+                      // CRASH
+                      playCrash();
+                      gs.lives--;
+                      gs.speed = 0;
+                      gs.noCrashTimer = 0;
+                      gs.nextExtraLifeMin = 5; // Reset reward threshold
+                      gs.objects.splice(i, 1);
+                      if (gs.lives <= 0) {
+                          gs.status = 'gameover';
+                          window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' }));
+                      }
+                  }
+              }
+          }
+      }
+    };
+
+    const loop = () => {
+      update(); draw();
+      animationFrameId = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [audioCtx, onMenu]);
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+    </div>
+  );
+};
+
 
 // --- BASS SNAKE GAME COMPONENT ---
 const SnakeGame = ({ audioCtx, onMenu }) => {
@@ -552,9 +915,9 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
         noise.connect(gain).connect(audioCtx.destination); noise.start(t0);
       } else if (type === 'siren') {
         let osc = audioCtx.createOscillator(); osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(800, t0); 
-        osc.frequency.linearRampToValueAtTime(1200, t0+1.0);
-        osc.frequency.linearRampToValueAtTime(800, t0+2.0);
+        osc.frequency.setValueAtTime(1200, t0); 
+        osc.frequency.linearRampToValueAtTime(1600, t0+1.0);
+        osc.frequency.linearRampToValueAtTime(1200, t0+2.0);
         
         let lfo = audioCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
         let lfoGain = audioCtx.createGain(); lfoGain.gain.value = 20;
@@ -2017,7 +2380,11 @@ export default function App() {
   // Video source handler
   useEffect(() => {
     if (videoRef.current) {
-      if (secretGameState === 'snake') {
+      if (secretGameState === 'drive') {
+        videoRef.current.src = "/drive.mp4";
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log(e));
+      } else if (secretGameState === 'snake') {
         videoRef.current.src = "/test.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
@@ -2402,11 +2769,13 @@ export default function App() {
                     if (game === 'galaga') window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaStart' }));
                     else if (game === 'commando') window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'commandoStart' }));
                     else if (game === 'snake') window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'snakeStart' }));
+                    else if (game === 'drive') window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'driveStart' }));
                   }} />
                 )}
                 {secretGameState === 'galaga' && <GalagaGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
                 {secretGameState === 'commando' && <CommandoGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
                 {secretGameState === 'snake' && <SnakeGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
+                {secretGameState === 'drive' && <DriveGame audioCtx={audioContextRef.current} onMenu={handleReturnToMenu} />}
                 
                 {secretGameState === 'none' && (
                   <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-opacity duration-700 ${bootStage === 'final-screen' ? 'opacity-100' : 'opacity-0'}`}>
