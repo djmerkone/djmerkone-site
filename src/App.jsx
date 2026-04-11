@@ -593,7 +593,8 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     lives: 3,
     wave: 1,
     isAsteroidLevel: false,
-    player: { x: 388, y: 530, w: 24, h: 24, speed: 6 },
+    spaceHeldFrames: 0, // Track overdrive
+    player: { x: 388, y: 530, w: 24, h: 24, speed: 6, tilt: 0 },
     bullets: [],
     enemyBullets: [],
     enemies: [],
@@ -612,7 +613,8 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         y: Math.random() * 600, 
         speed: (3 + Math.random() * 8) * 0.75, // Slowed down by 25%
         color: starColor,
-        shadow: isColored ? starColor : 'rgba(255, 255, 255, 0.5)'
+        shadow: isColored ? starColor : 'rgba(255, 255, 255, 0.5)',
+        twinkleTimer: Math.random() * 100
       };
     }),
     lastShot: 0
@@ -691,19 +693,27 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       const spacingX = 40;
       const spacingY = 35;
       const offsetX = (800 - (cols * spacingX)) / 2;
+      
+      let idx = 0;
+      let total = rows * cols;
+      
       for(let r=0; r<rows; r++) {
         for(let c=0; c<cols; c++) {
+          let group = Math.floor((idx / total) * 4); // 4 staggered mini waves
           arr.push({ 
-            x: offsetX + c * spacingX, y: 40 + r * spacingY, 
+            x: offsetX + c * spacingX, 
+            y: -100 - (Math.random() * 50), 
             w: 24, h: 24, 
             baseX: offsetX + c * spacingX, baseY: 40 + r * spacingY, 
             phase: Math.random() * Math.PI * 2,
             type: r % 3,
-            state: 'formation',
+            state: 'spawning',
+            spawnDelay: group * 45 + (c * 2), // Staggered entry
             attackTimer: 0,
             attackStartX: 0,
             attackStartY: 0
           });
+          idx++;
         }
       }
       return arr;
@@ -759,7 +769,10 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
 
     const killPlayer = (gs) => {
       gs.lives--;
+      gs.spaceHeldFrames = 0; // Reset overdrive tracker on death
       playExplode();
+      
+      // Explosion particles from player death
       for(let p=0; p<40; p++) {
         gs.particles.push({
           x: gs.player.x + gs.player.w/2, y: gs.player.y + gs.player.h/2,
@@ -821,12 +834,30 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         return;
       }
 
-      if (gs.status === 'playing' || (gs.status === 'respawning' && Math.floor(gs.respawnTimer / 5) % 2 === 0)) {
+      let isOverdrive = gs.spaceHeldFrames > 180;
+      let playerVisible = false;
+      if (gs.status === 'playing') playerVisible = true;
+      if (gs.status === 'respawning' && gs.respawnTimer < 90) playerVisible = true; // Ship loads solid when READY appears
+
+      if (playerVisible) {
         ctx.save();
-        ctx.translate(gs.player.x + gs.player.w / 2, gs.player.y + gs.player.h / 2);
-        ctx.rotate(gs.player.tilt || 0); // Apply player tilt based on movement direction
-        ctx.shadowColor = '#fff';
-        ctx.shadowBlur = 12;
+        let drawX = gs.player.x + gs.player.w / 2;
+        let drawY = gs.player.y + gs.player.h / 2;
+        
+        if (isOverdrive) {
+          drawX += (Math.random() - 0.5) * 8;
+          drawY += (Math.random() - 0.5) * 8;
+          ctx.shadowColor = '#f50';
+          ctx.shadowBlur = 25;
+        } else {
+          ctx.shadowColor = '#fff';
+          ctx.shadowBlur = 12;
+        }
+
+        ctx.translate(drawX, drawY);
+        // Pure Left/right bank (horizontal shear/skew) without rotating the forward direction
+        ctx.transform(1, 0, gs.player.tilt || 0, 1, 0, 0); 
+        
         if (imgPlayer.complete) {
           ctx.drawImage(imgPlayer, -gs.player.w / 2, -gs.player.h / 2, gs.player.w, gs.player.h);
         } else {
@@ -868,6 +899,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       } else {
         const glowColors = ['#f0f', '#f00', '#0f0'];
         gs.enemies.forEach(e => {
+          if (e.state === 'spawning') return; // Don't draw while in pure off-screen delay
           ctx.shadowColor = glowColors[e.type];
           ctx.shadowBlur = 12;
           const eImg = enemyImgs[e.type];
@@ -985,6 +1017,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           gs.player.y = 530;
           gs.player.tilt = 0;
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
+          gs.spaceHeldFrames = 0;
           window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
         }
         return;
@@ -997,10 +1030,27 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           gs.player.x = 388;
           gs.player.y = 530;
           gs.player.tilt = 0;
+          gs.spaceHeldFrames = 0;
         }
       }
 
       if (gs.status === 'playing') {
+        
+        // OVERDRIVE LOGIC
+        if (keys.current[' ']) {
+          gs.spaceHeldFrames++;
+        } else {
+          gs.spaceHeldFrames = 0;
+        }
+
+        if (gs.spaceHeldFrames > 270) { // 3 seconds (180) + 1.5 seconds (90) limit
+           killPlayer(gs);
+        }
+
+        let isOverdrive = gs.spaceHeldFrames > 180;
+        let fireDelay = isOverdrive ? 60 : 250; 
+
+        // MOVEMENT LOGIC
         let movingX = 0;
         if (keys.current['ArrowLeft'] || keys.current['a']) { gs.player.x -= gs.player.speed; movingX = -1; }
         if (keys.current['ArrowRight'] || keys.current['d']) { gs.player.x += gs.player.speed; movingX = 1; }
@@ -1010,12 +1060,12 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         gs.player.x = Math.max(0, Math.min(800 - gs.player.w, gs.player.x));
         gs.player.y = Math.max(400, Math.min(600 - gs.player.h - 10, gs.player.y)); // Allow small vertical movement in lower area
 
-        // Dynamic tilt physics
-        if (movingX < 0) gs.player.tilt = Math.max(-0.25, (gs.player.tilt || 0) - 0.05);
-        else if (movingX > 0) gs.player.tilt = Math.min(0.25, (gs.player.tilt || 0) + 0.05);
+        // Dynamic tilt physics (skew)
+        if (movingX < 0) gs.player.tilt = Math.max(-0.4, (gs.player.tilt || 0) - 0.05);
+        else if (movingX > 0) gs.player.tilt = Math.min(0.4, (gs.player.tilt || 0) + 0.05);
         else gs.player.tilt = (gs.player.tilt || 0) * 0.8;
 
-        if ((keys.current[' ']) && Date.now() - gs.lastShot > 250) {
+        if ((keys.current[' ']) && Date.now() - gs.lastShot > fireDelay) {
           gs.bullets.push({ x: gs.player.x + gs.player.w/2 - 2, y: gs.player.y, w: 4, h: 12, vy: -15 });
           gs.lastShot = Date.now();
           playShoot();
@@ -1066,6 +1116,9 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           } else {
             for (let j = gs.enemies.length - 1; j >= 0; j--) {
               let e = gs.enemies[j];
+              // Bullets shouldn't hit enemies waiting to spawn offscreen
+              if (e.state === 'spawning') continue; 
+
               if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
                 gs.enemies.splice(j, 1);
                 hit = true;
@@ -1120,7 +1173,20 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         for (let i = gs.enemies.length - 1; i >= 0; i--) {
           let e = gs.enemies[i];
           
-          if (e.state === 'formation') {
+          if (e.state === 'spawning') {
+            if (e.spawnDelay > 0) {
+              e.spawnDelay--;
+            } else {
+              let tx = e.baseX + formX;
+              let ty = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
+              e.x += (tx - e.x) * 0.08;
+              e.y += (ty - e.y) * 0.08;
+              if (Math.abs(e.x - tx) < 5 && Math.abs(e.y - ty) < 5) {
+                 e.state = 'formation';
+              }
+            }
+          }
+          else if (e.state === 'formation') {
             e.x = e.baseX + formX;
             e.y = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
           } 
@@ -1150,7 +1216,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
             }
           }
 
-          if (gs.status === 'playing') {
+          if (gs.status === 'playing' && e.state !== 'spawning') {
             if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
                 e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
                 killPlayer(gs);
