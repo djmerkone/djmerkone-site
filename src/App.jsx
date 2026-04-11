@@ -610,7 +610,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       return { 
         x: Math.random() * 800, 
         y: Math.random() * 600, 
-        speed: 3 + Math.random() * 8,
+        speed: (3 + Math.random() * 8) * 0.75, // Slowed down by 25%
         color: starColor,
         shadow: isColored ? starColor : 'rgba(255, 255, 255, 0.5)'
       };
@@ -710,7 +710,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     };
 
     const spawnAsteroids = (waveNum) => {
-      let count = 10 + waveNum * 2;
+      let count = Math.floor((10 + waveNum * 2) * 0.98); // Cut count by 2%
       let asts = [];
       for (let i = 0; i < count; i++) {
           asts.push({
@@ -817,24 +817,25 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         drawCRTText(ctx, "CHRONICLES OF CAPTAIN MERK", 400, 300, '#fff', '30px "VT323", monospace');
         drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
         drawCRTText(ctx, "PRESS M FOR MENU", 400, 460, '#fff', '20px "VT323", monospace');
-        drawCRTText(ctx, "ARROWS: Move  |  SPACE: Shoot", 400, 500, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "WASD/ARROWS: Move  |  SPACE: Shoot", 400, 500, '#fff', '20px "VT323", monospace');
         return;
       }
 
-      // Draw player ship if actively playing, or flashing during respawn sequence
-      let playerVisible = gs.status === 'playing' || (gs.status === 'respawning' && (gs.respawnTimer < 90 || Math.floor(gs.respawnTimer / 5) % 2 === 0));
-      if (playerVisible) {
+      if (gs.status === 'playing' || (gs.status === 'respawning' && Math.floor(gs.respawnTimer / 5) % 2 === 0)) {
+        ctx.save();
+        ctx.translate(gs.player.x + gs.player.w / 2, gs.player.y + gs.player.h / 2);
+        ctx.rotate(gs.player.tilt || 0); // Apply player tilt based on movement direction
         ctx.shadowColor = '#fff';
         ctx.shadowBlur = 12;
         if (imgPlayer.complete) {
-          ctx.drawImage(imgPlayer, gs.player.x, gs.player.y, gs.player.w, gs.player.h);
+          ctx.drawImage(imgPlayer, -gs.player.w / 2, -gs.player.h / 2, gs.player.w, gs.player.h);
         } else {
           ctx.fillStyle = '#fff'; ctx.beginPath();
-          ctx.moveTo(gs.player.x + gs.player.w/2, gs.player.y);
-          ctx.lineTo(gs.player.x + gs.player.w, gs.player.y + gs.player.h);
-          ctx.lineTo(gs.player.x, gs.player.y + gs.player.h); ctx.fill();
+          ctx.moveTo(0, -gs.player.h / 2);
+          ctx.lineTo(gs.player.w / 2, gs.player.h / 2);
+          ctx.lineTo(-gs.player.w / 2, gs.player.h / 2); ctx.fill();
         }
-        ctx.shadowBlur = 0;
+        ctx.restore();
       }
 
       if (gs.status === 'respawning' && gs.respawnTimer < 90) {
@@ -981,6 +982,8 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           gs.enemies = spawnWave(gs.wave);
           gs.asteroids = [];
           gs.player.x = 388;
+          gs.player.y = 530;
+          gs.player.tilt = 0;
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
           window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
         }
@@ -992,15 +995,27 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         if (gs.respawnTimer <= 0) {
           gs.status = 'playing';
           gs.player.x = 388;
+          gs.player.y = 530;
+          gs.player.tilt = 0;
         }
       }
 
       if (gs.status === 'playing') {
-        if (keys.current['ArrowLeft'] || keys.current['a']) gs.player.x -= gs.player.speed;
-        if (keys.current['ArrowRight'] || keys.current['d']) gs.player.x += gs.player.speed;
-        gs.player.x = Math.max(0, Math.min(800 - gs.player.w, gs.player.x));
+        let movingX = 0;
+        if (keys.current['ArrowLeft'] || keys.current['a']) { gs.player.x -= gs.player.speed; movingX = -1; }
+        if (keys.current['ArrowRight'] || keys.current['d']) { gs.player.x += gs.player.speed; movingX = 1; }
+        if (keys.current['ArrowUp'] || keys.current['w']) { gs.player.y -= gs.player.speed; }
+        if (keys.current['ArrowDown'] || keys.current['s']) { gs.player.y += gs.player.speed; }
 
-        if ((keys.current[' '] || keys.current['ArrowUp'] || keys.current['w']) && Date.now() - gs.lastShot > 250) {
+        gs.player.x = Math.max(0, Math.min(800 - gs.player.w, gs.player.x));
+        gs.player.y = Math.max(400, Math.min(600 - gs.player.h - 10, gs.player.y)); // Allow small vertical movement in lower area
+
+        // Dynamic tilt physics
+        if (movingX < 0) gs.player.tilt = Math.max(-0.25, (gs.player.tilt || 0) - 0.05);
+        else if (movingX > 0) gs.player.tilt = Math.min(0.25, (gs.player.tilt || 0) + 0.05);
+        else gs.player.tilt = (gs.player.tilt || 0) * 0.8;
+
+        if ((keys.current[' ']) && Date.now() - gs.lastShot > 250) {
           gs.bullets.push({ x: gs.player.x + gs.player.w/2 - 2, y: gs.player.y, w: 4, h: 12, vy: -15 });
           gs.lastShot = Date.now();
           playShoot();
@@ -1087,10 +1102,11 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           }
         }
 
-        let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 60)); 
+        // Cut sway down by 15% (0.85 multiplier)
+        let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 60)) * 0.85; 
         
-        // Block new attacks during respawn
-        if (gs.status === 'playing' && Math.random() < 0.015 + (gs.wave * 0.002)) {
+        // Block new attacks during respawn, and cut overall dive rate by 15%
+        if (gs.status === 'playing' && Math.random() < (0.015 + (gs.wave * 0.002)) * 0.85) {
           let formEnemies = gs.enemies.filter(e => e.state === 'formation');
           if(formEnemies.length > 0) {
             let randE = formEnemies[Math.floor(Math.random() * formEnemies.length)];
@@ -1150,16 +1166,17 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           a.y += a.vy;
           a.rotation += a.rotSpeed;
 
-          if (a.x < -a.radius) a.x = 800 + a.radius;
-          if (a.x > 800 + a.radius) a.x = -a.radius;
-          if (a.y > 600 + a.radius) a.y = -a.radius; 
-
           if (gs.status === 'playing') {
               let dx = (gs.player.x + gs.player.w/2) - a.x;
               let dy = (gs.player.y + gs.player.h/2) - a.y;
               if (Math.hypot(dx, dy) < a.radius + 8) {
                   killPlayer(gs);
               }
+          }
+
+          // Unload the asteroid if it drifts out of screen bounds (No longer wrapping)
+          if (a.y > 600 + a.radius || a.x < -a.radius || a.x > 800 + a.radius) {
+              gs.asteroids.splice(i, 1);
           }
         }
       }
