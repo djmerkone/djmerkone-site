@@ -592,25 +592,21 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     highScore: 0,
     lives: 3,
     wave: 1,
+    isAsteroidLevel: false,
     player: { x: 388, y: 530, w: 24, h: 24, speed: 6 },
     bullets: [],
     enemyBullets: [],
     enemies: [],
+    asteroids: [],
     particles: [],
-    stars: Array(100).fill().map(() => {
+    stars: Array(120).fill().map(() => {
       const isColored = Math.random() < 0.20; 
-      const colors = [
-        'rgba(0, 255, 255, 0.4)',   
-        'rgba(255, 0, 255, 0.4)',   
-        'rgba(255, 255, 0, 0.4)'    
-      ];
-      const starColor = isColored ? colors[Math.floor(Math.random() * colors.length)] : '#ffffff';
       return { 
         x: Math.random() * 800, 
         y: Math.random() * 600, 
-        speed: 3 + Math.random() * 8,
-        color: starColor,
-        shadow: isColored ? starColor : 'rgba(255, 255, 255, 0.5)'
+        speed: 1 + Math.random() * 6,
+        isColored: isColored,
+        twinkleTimer: Math.random() * 100
       };
     }),
     lastShot: 0
@@ -707,8 +703,32 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       return arr;
     };
 
-    if (state.current.enemies.length === 0) {
-       state.current.enemies = spawnWave(state.current.wave);
+    const spawnAsteroids = (waveNum) => {
+      let count = 10 + waveNum * 2;
+      let asts = [];
+      for (let i = 0; i < count; i++) {
+          asts.push({
+              x: Math.random() * 800,
+              y: -50 - Math.random() * 1500, 
+              vx: (Math.random() - 0.5) * 2,
+              vy: 0.5 + Math.random() * 1.5,
+              size: 3, 
+              radius: 30,
+              rotation: Math.random() * Math.PI * 2,
+              rotSpeed: (Math.random() - 0.5) * 0.1,
+              points: Array(8).fill(0).map(() => 0.6 + Math.random() * 0.4) 
+          });
+      }
+      return asts;
+    };
+
+    if (state.current.enemies.length === 0 && state.current.asteroids.length === 0) {
+       if (state.current.wave % 4 === 0) {
+         state.current.isAsteroidLevel = true;
+         state.current.asteroids = spawnAsteroids(state.current.wave);
+       } else {
+         state.current.enemies = spawnWave(state.current.wave);
+       }
     }
 
     const fireEnemyBullet = (e, gs) => {
@@ -753,6 +773,19 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     };
 
     const formatScore = (s) => String(s).padStart(6, '0');
+    
+    const getTwinkleColor = (s) => {
+      if (!s.isColored) return { c: '#ffffff', shadow: 'rgba(255,255,255,0.5)' };
+      const colors = [
+          {c: 'rgba(0, 255, 255, 0.6)', shadow: 'rgba(0, 255, 255, 0.8)'},   
+          {c: 'rgba(255, 0, 255, 0.6)', shadow: 'rgba(255, 0, 255, 0.8)'},   
+          {c: 'rgba(255, 255, 0, 0.6)', shadow: 'rgba(255, 255, 0, 0.8)'},
+          {c: 'rgba(255, 0, 0, 0.6)', shadow: 'rgba(255, 0, 0, 0.8)'},
+          {c: 'rgba(0, 255, 0, 0.6)', shadow: 'rgba(0, 255, 0, 0.8)'}
+      ];
+      let cIdx = Math.floor(s.twinkleTimer / 15) % colors.length;
+      return colors[cIdx];
+    };
 
     const draw = () => {
       let gs = state.current;
@@ -762,10 +795,13 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       gs.stars.forEach(s => { 
-        ctx.fillStyle = s.color;
-        ctx.shadowColor = s.shadow;
-        ctx.shadowBlur = 5;
-        ctx.fillRect(s.x, s.y, 2, 2); 
+        s.twinkleTimer++;
+        let tc = getTwinkleColor(s);
+        ctx.fillStyle = tc.c;
+        ctx.shadowColor = tc.shadow;
+        ctx.shadowBlur = s.isColored ? 8 : 3;
+        let size = s.isColored ? 3 : 2;
+        ctx.fillRect(s.x, s.y, size, size); 
       });
       ctx.shadowBlur = 0;
 
@@ -792,19 +828,44 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         ctx.shadowBlur = 0;
       }
 
-      const glowColors = ['#f0f', '#f00', '#0f0'];
-      gs.enemies.forEach(e => {
-        ctx.shadowColor = glowColors[e.type];
-        ctx.shadowBlur = 12;
-        const eImg = enemyImgs[e.type];
-        if (eImg && eImg.complete) {
-          ctx.drawImage(eImg, e.x, e.y, e.w, e.h);
-        } else {
-          ctx.fillStyle = glowColors[e.type];
-          ctx.fillRect(e.x, e.y, e.w, e.h);
-        }
-      });
-      ctx.shadowBlur = 0;
+      if (gs.isAsteroidLevel) {
+        ctx.strokeStyle = '#fa0';
+        ctx.fillStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#fa0';
+        ctx.shadowBlur = 10;
+        gs.asteroids.forEach(a => {
+            ctx.save();
+            ctx.translate(a.x, a.y);
+            ctx.rotate(a.rotation);
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                let angle = (i / 8) * Math.PI * 2;
+                let r = a.radius * a.points[i];
+                if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+                else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        });
+        ctx.shadowBlur = 0;
+      } else {
+        const glowColors = ['#f0f', '#f00', '#0f0'];
+        gs.enemies.forEach(e => {
+          ctx.shadowColor = glowColors[e.type];
+          ctx.shadowBlur = 12;
+          const eImg = enemyImgs[e.type];
+          if (eImg && eImg.complete) {
+            ctx.drawImage(eImg, e.x, e.y, e.w, e.h);
+          } else {
+            ctx.fillStyle = glowColors[e.type];
+            ctx.fillRect(e.x, e.y, e.w, e.h);
+          }
+        });
+        ctx.shadowBlur = 0;
+      }
 
       let pulse = Math.abs(Math.sin(Date.now() * 0.02)) * 4;
       ctx.fillStyle = '#0ff'; 
@@ -851,7 +912,11 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
 
       if (gs.status === 'levelcleared') {
         ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,800,600);
-        drawCRTText(ctx, `WAVE ${gs.wave} CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
+        if (gs.isAsteroidLevel) {
+          drawCRTText(ctx, `ASTEROID FIELD CLEARED!`, 400, 280, '#fa0', '60px "VT323", monospace');
+        } else {
+          drawCRTText(ctx, `WAVE ${gs.wave} CLEARED!`, 400, 280, '#0f0', '60px "VT323", monospace');
+        }
         drawCRTText(ctx, "PRESS ENTER TO CONTINUE", 400, 350, '#fff', '30px "VT323", monospace');
       }
     };
@@ -880,7 +945,14 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
       if (gs.status === 'levelcleared') {
         if (keys.current['Enter']) {
           gs.wave++;
-          gs.enemies = spawnWave(gs.wave);
+          gs.isAsteroidLevel = (gs.wave % 4 === 0);
+          if (gs.isAsteroidLevel) {
+            gs.asteroids = spawnAsteroids(gs.wave);
+            gs.enemies = [];
+          } else {
+            gs.enemies = spawnWave(gs.wave);
+            gs.asteroids = [];
+          }
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
           gs.status = 'playing';
           window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
@@ -892,7 +964,9 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         if (keys.current['Enter']) {
           gs.status = 'playing';
           gs.score = 0; gs.lives = 3; gs.wave = 1;
+          gs.isAsteroidLevel = false;
           gs.enemies = spawnWave(gs.wave);
+          gs.asteroids = [];
           gs.player.x = 388;
           gs.bullets = []; gs.enemyBullets = []; gs.particles = [];
           window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaPlay' }));
@@ -919,97 +993,159 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           playShoot();
         }
 
+        // Bullets vs Enemies / Asteroids
         for (let i = gs.bullets.length - 1; i >= 0; i--) {
           let b = gs.bullets[i];
           b.y += b.vy;
           if (b.y < 0) { gs.bullets.splice(i, 1); continue; }
           
-          for (let j = gs.enemies.length - 1; j >= 0; j--) {
-            let e = gs.enemies[j];
-            if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
-              gs.enemies.splice(j, 1);
-              gs.bullets.splice(i, 1);
-              gs.score += 150;
-              if (gs.score > gs.highScore) gs.highScore = gs.score;
-              playExplode();
-              for(let p=0; p<15; p++) {
-                gs.particles.push({
-                  x: e.x + e.w/2, y: e.y + e.h/2,
-                  vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 30
-                });
+          let hit = false;
+
+          if (gs.isAsteroidLevel) {
+            for (let j = gs.asteroids.length - 1; j >= 0; j--) {
+              let a = gs.asteroids[j];
+              if (Math.hypot(b.x - a.x, b.y - a.y) < a.radius) {
+                  hit = true;
+                  playExplode();
+                  gs.score += 50 * a.size;
+                  if (gs.score > gs.highScore) gs.highScore = gs.score;
+                  
+                  for(let p=0; p<10*a.size; p++) {
+                      gs.particles.push({
+                          x: a.x, y: a.y,
+                          vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 30
+                      });
+                  }
+
+                  if (a.size > 1) {
+                      let newSize = a.size - 1;
+                      let newRad = newSize === 2 ? 20 : 10;
+                      gs.asteroids.push({
+                          x: a.x, y: a.y, vx: a.vx - 1 - Math.random(), vy: a.vy,
+                          size: newSize, radius: newRad, rotation: a.rotation, rotSpeed: a.rotSpeed * 1.5,
+                          points: Array(8).fill(0).map(() => 0.6 + Math.random() * 0.4)
+                      });
+                      gs.asteroids.push({
+                          x: a.x, y: a.y, vx: a.vx + 1 + Math.random(), vy: a.vy,
+                          size: newSize, radius: newRad, rotation: a.rotation, rotSpeed: -a.rotSpeed * 1.5,
+                          points: Array(8).fill(0).map(() => 0.6 + Math.random() * 0.4)
+                      });
+                  }
+                  gs.asteroids.splice(j, 1);
+                  break;
               }
-              break;
+            }
+          } else {
+            for (let j = gs.enemies.length - 1; j >= 0; j--) {
+              let e = gs.enemies[j];
+              if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
+                gs.enemies.splice(j, 1);
+                hit = true;
+                gs.score += 150;
+                if (gs.score > gs.highScore) gs.highScore = gs.score;
+                playExplode();
+                for(let p=0; p<15; p++) {
+                  gs.particles.push({
+                    x: e.x + e.w/2, y: e.y + e.h/2,
+                    vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 30
+                  });
+                }
+                break;
+              }
+            }
+          }
+          if (hit) gs.bullets.splice(i, 1);
+        }
+      }
+
+      if (!gs.isAsteroidLevel) {
+        for (let i = gs.enemyBullets.length - 1; i >= 0; i--) {
+          let eb = gs.enemyBullets[i];
+          eb.x += eb.vx; eb.y += eb.vy;
+          if (eb.y > 600 || eb.x < 0 || eb.x > 800) { gs.enemyBullets.splice(i, 1); continue; }
+          
+          if (gs.status === 'playing') {
+            if (eb.x < gs.player.x + gs.player.w && eb.x + eb.w > gs.player.x &&
+                eb.y < gs.player.y + gs.player.h && eb.y + eb.h > gs.player.y) {
+                gs.enemyBullets.splice(i, 1);
+                killPlayer(gs);
+                break;
             }
           }
         }
-      }
 
-      for (let i = gs.enemyBullets.length - 1; i >= 0; i--) {
-        let eb = gs.enemyBullets[i];
-        eb.x += eb.vx; eb.y += eb.vy;
-        if (eb.y > 600 || eb.x < 0 || eb.x > 800) { gs.enemyBullets.splice(i, 1); continue; }
+        let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 60)); 
         
-        if (gs.status === 'playing') {
-          if (eb.x < gs.player.x + gs.player.w && eb.x + eb.w > gs.player.x &&
-              eb.y < gs.player.y + gs.player.h && eb.y + eb.h > gs.player.y) {
-              gs.enemyBullets.splice(i, 1);
-              killPlayer(gs);
-              break;
-          }
-        }
-      }
-
-      let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 60)); 
-      
-      if (Math.random() < 0.015 + (gs.wave * 0.002)) {
-        let formEnemies = gs.enemies.filter(e => e.state === 'formation');
-        if(formEnemies.length > 0) {
-          let randE = formEnemies[Math.floor(Math.random() * formEnemies.length)];
-          randE.state = 'attacking';
-          randE.attackStartX = randE.x;
-          randE.attackStartY = randE.y;
-          randE.attackTimer = 0;
-        }
-      }
-
-      for (let i = gs.enemies.length - 1; i >= 0; i--) {
-        let e = gs.enemies[i];
-        
-        if (e.state === 'formation') {
-          e.x = e.baseX + formX;
-          e.y = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
-        } 
-        else if (e.state === 'attacking') {
-          e.attackTimer++;
-          e.y = e.attackStartY + (e.attackTimer * (4 + gs.wave * 0.3));
-          e.x = e.attackStartX + Math.sin(e.attackTimer * 0.05) * 100;
-          e.x = Math.max(0, Math.min(800 - e.w, e.x));
-
-          if (gs.status === 'playing' && Math.random() < 0.015 + (gs.wave * 0.002)) {
-            fireEnemyBullet(e, gs);
-          }
-
-          if (e.y > 600) {
-            e.y = -50;
-            e.state = 'returning';
-          }
-        } 
-        else if (e.state === 'returning') {
-          let tx = e.baseX + formX;
-          let ty = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
-          e.x += (tx - e.x) * 0.05;
-          e.y += (ty - e.y) * 0.05;
-          if (Math.abs(e.x - tx) < 5 && Math.abs(e.y - ty) < 5) {
-             e.state = 'formation';
-             e.x = tx; e.y = ty;
+        if (Math.random() < 0.015 + (gs.wave * 0.002)) {
+          let formEnemies = gs.enemies.filter(e => e.state === 'formation');
+          if(formEnemies.length > 0) {
+            let randE = formEnemies[Math.floor(Math.random() * formEnemies.length)];
+            randE.state = 'attacking';
+            randE.attackStartX = randE.x;
+            randE.attackStartY = randE.y;
+            randE.attackTimer = 0;
           }
         }
 
-        if (gs.status === 'playing') {
-          if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
-              e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
-              killPlayer(gs);
-              gs.enemies.splice(i, 1);
+        for (let i = gs.enemies.length - 1; i >= 0; i--) {
+          let e = gs.enemies[i];
+          
+          if (e.state === 'formation') {
+            e.x = e.baseX + formX;
+            e.y = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
+          } 
+          else if (e.state === 'attacking') {
+            e.attackTimer++;
+            e.y = e.attackStartY + (e.attackTimer * (4 + gs.wave * 0.3));
+            e.x = e.attackStartX + Math.sin(e.attackTimer * 0.05) * 100;
+            e.x = Math.max(0, Math.min(800 - e.w, e.x));
+
+            if (gs.status === 'playing' && Math.random() < 0.015 + (gs.wave * 0.002)) {
+              fireEnemyBullet(e, gs);
+            }
+
+            if (e.y > 600) {
+              e.y = -50;
+              e.state = 'returning';
+            }
+          } 
+          else if (e.state === 'returning') {
+            let tx = e.baseX + formX;
+            let ty = e.baseY + Math.cos((Date.now() / 500) + e.phase) * 10;
+            e.x += (tx - e.x) * 0.05;
+            e.y += (ty - e.y) * 0.05;
+            if (Math.abs(e.x - tx) < 5 && Math.abs(e.y - ty) < 5) {
+               e.state = 'formation';
+               e.x = tx; e.y = ty;
+            }
+          }
+
+          if (gs.status === 'playing') {
+            if (e.x < gs.player.x + gs.player.w && e.x + e.w > gs.player.x && 
+                e.y < gs.player.y + gs.player.h && e.y + e.h > gs.player.y) {
+                killPlayer(gs);
+                gs.enemies.splice(i, 1);
+            }
+          }
+        }
+      } else {
+        // Asteroid Logic
+        for (let i = gs.asteroids.length - 1; i >= 0; i--) {
+          let a = gs.asteroids[i];
+          a.x += a.vx;
+          a.y += a.vy;
+          a.rotation += a.rotSpeed;
+
+          if (a.x < -a.radius) a.x = 800 + a.radius;
+          if (a.x > 800 + a.radius) a.x = -a.radius;
+          if (a.y > 600 + a.radius) a.y = -a.radius; 
+
+          if (gs.status === 'playing') {
+              let dx = (gs.player.x + gs.player.w/2) - a.x;
+              let dy = (gs.player.y + gs.player.h/2) - a.y;
+              if (Math.hypot(dx, dy) < a.radius + 8) {
+                  killPlayer(gs);
+              }
           }
         }
       }
@@ -1020,7 +1156,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         if (p.life <= 0) gs.particles.splice(i, 1);
       }
 
-      if (gs.enemies.length === 0 && gs.status !== 'gameover' && gs.status !== 'levelcleared') {
+      if (gs.enemies.length === 0 && gs.asteroids.length === 0 && gs.status !== 'gameover' && gs.status !== 'levelcleared') {
         gs.status = 'levelcleared';
         window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'none' })); 
       }
