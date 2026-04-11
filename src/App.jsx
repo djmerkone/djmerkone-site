@@ -321,6 +321,30 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       }
     };
 
+    const handleMouseMove = (e) => {
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      state.current.crosshair.x = Math.max(0, Math.min(800, (e.clientX - rect.left) * scaleX));
+      state.current.crosshair.y = Math.max(0, Math.min(520, (e.clientY - rect.top) * scaleY));
+    };
+
+    const handleMouseDown = (e) => {
+      let gs = state.current;
+      if (gs.status === 'playing' && Date.now() - gs.lastShot > 300) {
+        gs.outgoing.push({
+          sx: 400, sy: 580, tx: gs.crosshair.x, ty: gs.crosshair.y,
+          x: 400, y: 580, progress: 0, speed: 0.05
+        });
+        gs.lastShot = Date.now();
+        playAudio('launch');
+      }
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mousedown', handleMouseDown);
+
     const spawnWave = (wave) => {
       let count = 5 + wave * 3;
       let inc = [];
@@ -353,7 +377,8 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
         drawCRTText(ctx, "BASS COMMANDO", 400, 250, '#0ff', '60px "VT323", monospace');
         drawCRTText(ctx, "DEFEND THE SECTOR", 400, 300, '#fff', '30px "VT323", monospace');
         drawCRTText(ctx, "PRESS ENTER TO START", 400, 380, '#fff', '24px "VT323", monospace');
-        drawCRTText(ctx, "PRESS M FOR MENU", 400, 430, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "PRESS M FOR MENU", 400, 420, '#fff', '20px "VT323", monospace');
+        drawCRTText(ctx, "MOUSE: Aim  |  CLICK: Shoot", 400, 470, '#fff', '20px "VT323", monospace');
         return;
       }
 
@@ -451,7 +476,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
 
       if (gs.status !== 'playing') return;
 
-      // Crosshair
+      // Keyboard Fallback for Crosshair
       if (keys.current['ArrowLeft'] || keys.current['a']) gs.crosshair.x -= gs.crosshair.speed;
       if (keys.current['ArrowRight'] || keys.current['d']) gs.crosshair.x += gs.crosshair.speed;
       if (keys.current['ArrowUp'] || keys.current['w']) gs.crosshair.y -= gs.crosshair.speed;
@@ -459,7 +484,7 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
       gs.crosshair.x = Math.max(0, Math.min(800, gs.crosshair.x));
       gs.crosshair.y = Math.max(0, Math.min(520, gs.crosshair.y));
 
-      // Shoot
+      // Keyboard Fallback Shoot
       if (keys.current[' '] && Date.now() - gs.lastShot > 300) {
         gs.outgoing.push({
           sx: 400, sy: 580, tx: gs.crosshair.x, ty: gs.crosshair.y,
@@ -542,12 +567,16 @@ const CommandoGame = ({ audioCtx, onMenu }) => {
     };
     loop();
 
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mousedown', handleMouseDown);
+    };
   }, [audioCtx, onMenu]);
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-auto bg-transparent">
-      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent" />
+      <canvas ref={canvasRef} width={800} height={600} className="w-full h-full object-fill bg-transparent cursor-none" />
     </div>
   );
 };
