@@ -601,12 +601,18 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
     particles: [],
     stars: Array(120).fill().map(() => {
       const isColored = Math.random() < 0.20; 
+      const colors = [
+        'rgba(0, 255, 255, 0.4)',   
+        'rgba(255, 0, 255, 0.4)',   
+        'rgba(255, 255, 0, 0.4)'    
+      ];
+      const starColor = isColored ? colors[Math.floor(Math.random() * colors.length)] : '#ffffff';
       return { 
         x: Math.random() * 800, 
         y: Math.random() * 600, 
-        speed: 1 + Math.random() * 6,
-        isColored: isColored,
-        twinkleTimer: Math.random() * 100
+        speed: 3 + Math.random() * 8,
+        color: starColor,
+        shadow: isColored ? starColor : 'rgba(255, 255, 255, 0.5)'
       };
     }),
     lastShot: 0
@@ -738,7 +744,7 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
 
       let angle = Math.atan2(dy, dx);
       let centerAngle = Math.PI / 2; 
-      let maxAngle = 35 * Math.PI / 180; 
+      let maxAngle = 20 * Math.PI / 180; // Tightened firing cone for balanced difficulty
       
       if (angle < centerAngle - maxAngle) angle = centerAngle - maxAngle;
       if (angle > centerAngle + maxAngle) angle = centerAngle + maxAngle;
@@ -768,7 +774,8 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         window.dispatchEvent(new CustomEvent('bgmTrack', { detail: 'galagaOver' }));
       } else {
         gs.status = 'respawning';
-        gs.respawnTimer = 120; 
+        gs.respawnTimer = 180; // Lengthened respawn sequence to 3 seconds
+        gs.enemies.forEach(e => { if(e.state === 'attacking') e.state = 'returning'; }); // Force enemies to break off attack runs
       }
     };
 
@@ -814,7 +821,9 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
         return;
       }
 
-      if (gs.status === 'playing' || (gs.status === 'respawning' && Math.floor(gs.respawnTimer / 5) % 2 === 0)) {
+      // Draw player ship if actively playing, or flashing during respawn sequence
+      let playerVisible = gs.status === 'playing' || (gs.status === 'respawning' && (gs.respawnTimer < 90 || Math.floor(gs.respawnTimer / 5) % 2 === 0));
+      if (playerVisible) {
         ctx.shadowColor = '#fff';
         ctx.shadowBlur = 12;
         if (imgPlayer.complete) {
@@ -826,6 +835,10 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
           ctx.lineTo(gs.player.x, gs.player.y + gs.player.h); ctx.fill();
         }
         ctx.shadowBlur = 0;
+      }
+
+      if (gs.status === 'respawning' && gs.respawnTimer < 90) {
+        drawCRTText(ctx, "READY", 400, 320, '#0f0', '40px "VT323", monospace');
       }
 
       if (gs.isAsteroidLevel) {
@@ -1076,7 +1089,8 @@ const GalagaGame = ({ audioCtx, onMenu }) => {
 
         let formX = Math.sin(Date.now() / 1500) * (40 + Math.min(gs.wave * 2, 60)); 
         
-        if (Math.random() < 0.015 + (gs.wave * 0.002)) {
+        // Block new attacks during respawn
+        if (gs.status === 'playing' && Math.random() < 0.015 + (gs.wave * 0.002)) {
           let formEnemies = gs.enemies.filter(e => e.state === 'formation');
           if(formEnemies.length > 0) {
             let randE = formEnemies[Math.floor(Math.random() * formEnemies.length)];
