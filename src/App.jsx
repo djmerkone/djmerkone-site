@@ -2381,7 +2381,7 @@ export default function App() {
   useEffect(() => {
     if (videoRef.current) {
       if (secretGameState === 'drive') {
-        videoRef.current.src = "/drive.mp4";
+        videoRef.current.src = "/game2.mp4";
         videoRef.current.load();
         videoRef.current.play().catch(e => console.log(e));
       } else if (secretGameState === 'snake') {
